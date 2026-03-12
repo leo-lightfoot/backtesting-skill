@@ -1,0 +1,33 @@
+{
+  "template": "sma_crossover_long_only",
+  "symbol": "QQQ",
+  "bundle": "yahoo_5m_qqq",
+  "frequency_minutes": 5,
+  "start": "2025-06-10",
+  "end": "2025-07-31",
+  "timezone": "America/New_York",
+  "initial_cash": 100000,
+  "benchmark_symbol": "QQQ",
+  "data": {
+    "source": "bundle",
+    "allow_yahoo_ingest": false,
+    "symbols": [
+      "QQQ",
+      "SPY",
+      "IWM"
+    ]
+  },
+  "params": {
+    "short_window": 50,
+    "long_window": 200,
+    "max_positions": 2,
+    "rank_metric": "ma_ratio",
+    "rebalance_rule": "weekly"
+  },
+  "grid_search": {
+    "enabled": false,
+    "rank_by": "sharpe",
+    "top_n": 5,
+    "params": {}
+  }
+}

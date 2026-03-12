@@ -1,0 +1,54 @@
+{
+  "template": "trend_dip_buy_long_only",
+  "symbol": "QQQ",
+  "bundle": "yahoo_1d_qqq",
+  "frequency_minutes": 1440,
+  "start": "2018-01-02",
+  "end": "2026-03-10",
+  "timezone": "America/New_York",
+  "initial_cash": 100000,
+  "benchmark_symbol": "QQQ",
+  "live_data": {
+    "enabled": false,
+    "provider": "ibkr",
+    "host": "127.0.0.1",
+    "port": 7497,
+    "client_id": 1,
+    "account": "DUXXXXXX"
+  },
+  "execution": {
+    "max_leverage": 1.0,
+    "same_bar_execution": false,
+    "price_used_in_order_execution": "close",
+    "costs": {
+      "slippage_bps": 5.0,
+      "volume_limit_fraction": 0.1,
+      "commission_per_share_usd": 0.001,
+      "commission_min_trade_usd": 0.0
+    }
+  },
+  "data": {
+    "source": "bundle",
+    "allow_yahoo_ingest": true,
+    "symbols": [
+      "QQQ"
+    ]
+  },
+  "params": {
+    "sma_fast_period": 8,
+    "sma_med_period": 20,
+    "sma_slow_period": 50,
+    "slope_lookback": 5,
+    "touch_ma": "sma_med",
+    "bounce_range_ratio": 0.55,
+    "exit_below_ma": "sma_med",
+    "min_price": 5.0,
+    "min_avg_daily_volume": 2000000
+  },
+  "grid_search": {
+    "enabled": false,
+    "rank_by": "sharpe",
+    "top_n": 5,
+    "params": {}
+  }
+}

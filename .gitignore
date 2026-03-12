@@ -1,0 +1,5 @@
+.opencode/
+.ruff_cache/
+.ziplime_data/
+__pycache__/
+*.pyc
