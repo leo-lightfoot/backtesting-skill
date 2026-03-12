@@ -1,0 +1,26 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="360" fill="#F8FAFC"/>
+  <text x="60" y="44" fill="#0F172A" font-family="IBM Plex Sans, Arial, sans-serif" font-size="28" font-weight="700">Structured output preview</text>
+
+  <rect x="60" y="80" width="700" height="240" rx="16" fill="white" stroke="#E2E8F0"/>
+  <text x="90" y="118" fill="#0F172A" font-family="IBM Plex Sans, Arial, sans-serif" font-size="18" font-weight="700">Equity Curve</text>
+  <line x1="90" y1="280" x2="720" y2="280" stroke="#CBD5E1"/>
+  <line x1="90" y1="140" x2="90" y2="280" stroke="#CBD5E1"/>
+  <polyline points="90,250 150,240 210,230 270,210 330,205 390,180 450,170 510,165 570,140 630,130 690,120"
+    fill="none" stroke="#0EA5A4" stroke-width="4"/>
+
+  <rect x="780" y="80" width="360" height="240" rx="16" fill="white" stroke="#E2E8F0"/>
+  <text x="810" y="118" fill="#0F172A" font-family="IBM Plex Sans, Arial, sans-serif" font-size="18" font-weight="700">Core metrics</text>
+
+  <text x="810" y="160" fill="#334155" font-family="Source Sans 3, Arial, sans-serif" font-size="17">Sharpe</text>
+  <text x="1110" y="160" text-anchor="end" fill="#0F172A" font-family="IBM Plex Mono, Courier New, monospace" font-size="17">0.95</text>
+
+  <text x="810" y="194" fill="#334155" font-family="Source Sans 3, Arial, sans-serif" font-size="17">Max Drawdown</text>
+  <text x="1110" y="194" text-anchor="end" fill="#0F172A" font-family="IBM Plex Mono, Courier New, monospace" font-size="17">-6.97%</text>
+
+  <text x="810" y="228" fill="#334155" font-family="Source Sans 3, Arial, sans-serif" font-size="17">Annualized Turnover</text>
+  <text x="1110" y="228" text-anchor="end" fill="#0F172A" font-family="IBM Plex Mono, Courier New, monospace" font-size="17">1160.74%</text>
+
+  <text x="810" y="262" fill="#334155" font-family="Source Sans 3, Arial, sans-serif" font-size="17">Participation Risk</text>
+  <text x="1110" y="262" text-anchor="end" fill="#16A34A" font-family="IBM Plex Mono, Courier New, monospace" font-size="17" font-weight="700">low</text>
+</svg>
