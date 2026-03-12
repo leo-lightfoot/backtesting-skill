@@ -86,6 +86,10 @@ Grid mode adds:
 - `top_results`
 - `stability_diagnostics`
 
+<p align="center">
+  <img src="assets/data-live-interface.svg" alt="Data and live interface" width="100%" />
+</p>
+
 ## Supported Templates
 
 - `oversold_bounce_long_only`
@@ -102,10 +106,16 @@ Multi-symbol equal-weight mode is available for:
 ## Data and Live Interface
 
 - Active runtime data source: `data.source = "bundle"`
-- Reserved data interfaces: `csv`, `parquet`, `custom` (schema-level placeholders)
-- Reserved live interface: `live_data` (for example `ibkr`) is config validation only
+- Reserved data interfaces: `csv`, `parquet`, `custom` (replaceable by design)
+- Reserved live interface: `live_data` (for example `ibkr`) is validation-only and not production live trading
 
 See `references/schema.md` for complete fields and output contract.
+
+## Star History
+
+<p align="center">
+  <img src="https://api.star-history.com/svg?repos=garroshub/backtesting-skill&type=Date" alt="Star History Chart" width="100%" />
+</p>
 
 ## Project Layout
 
