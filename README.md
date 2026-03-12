@@ -32,6 +32,33 @@ This project is **not** a full portfolio optimization platform.
   <img src="assets/pipeline.svg" alt="Pipeline" width="100%" />
 </p>
 
+## Install as an Agent Skill (npx)
+
+Install from GitHub (project-local):
+
+```bash
+npx skills add https://github.com/garroshub/backtesting-skill -a opencode -y
+```
+
+Verify the skill is installed:
+
+```bash
+npx skills list -a opencode
+```
+
+Optional checks and alternatives:
+
+```bash
+# Show available skills in this repo without installing
+npx skills add https://github.com/garroshub/backtesting-skill --list
+
+# Global install
+npx skills add https://github.com/garroshub/backtesting-skill -g -a opencode -y
+
+# Legacy alias (deprecated)
+npx add-skill garroshub/backtesting-skill
+```
+
 ## Quick Start
 
 Python 3.11+ is recommended.
