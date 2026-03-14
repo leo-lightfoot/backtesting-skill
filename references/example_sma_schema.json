@@ -1,33 +1,42 @@
 {
+  "_description": "SMA Crossover strategy — multi-symbol (QQQ, SPY, IWM) on 5-minute bars. Holds the top 2 assets ranked by MA ratio, rebalances weekly.",
+
   "template": "sma_crossover_long_only",
-  "symbol": "QQQ",
-  "bundle": "yahoo_5m_qqq",
-  "frequency_minutes": 5,
+  "symbols": ["QQQ", "SPY", "IWM"],
+  "frequency": "5min",
   "start": "2025-06-10",
   "end": "2025-07-31",
-  "timezone": "America/New_York",
   "initial_cash": 100000,
-  "benchmark_symbol": "QQQ",
-  "data": {
-    "source": "bundle",
+
+  "strategy": {
+    "short_ma": 50,
+    "long_ma": 200
+  },
+
+  "advanced": {
+    "benchmark": "QQQ",
     "allow_yahoo_ingest": false,
-    "symbols": [
-      "QQQ",
-      "SPY",
-      "IWM"
-    ]
-  },
-  "params": {
-    "short_window": 50,
-    "long_window": 200,
     "max_positions": 2,
-    "rank_metric": "ma_ratio",
-    "rebalance_rule": "weekly"
-  },
-  "grid_search": {
-    "enabled": false,
-    "rank_by": "sharpe",
-    "top_n": 5,
-    "params": {}
+    "rank_by": "ma_ratio",
+    "rebalance": "weekly",
+
+    "execution": {
+      "slippage_bps": 5.0,
+      "commission_per_share": 0.001
+    },
+
+    "grid_search": {
+      "enabled": false,
+      "rank_by": "sharpe",
+      "top_n": 5,
+      "params": {}
+    },
+
+    "validation_split": {
+      "enabled": false,
+      "method": "date",
+      "split_date": "2025-07-01",
+      "rank_on": "test_sharpe"
+    }
   }
 }

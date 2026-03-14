@@ -61,11 +61,21 @@ npx add-skill garroshub/backtesting-skill
 
 ## Quick Start
 
-Python 3.11+ is recommended.
+**Python 3.12 or 3.13 is required.** Python 3.11 is not supported (`ziplime` requires 3.12+).
+
+**Windows:**
 
 ```bash
-python -m venv .venv
+py -3.13 -m venv .venv
 .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**macOS / Linux:**
+
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -150,6 +160,8 @@ See `references/schema.md` for complete fields and output contract.
 - `references/schema.md`: schema and output reference
 - `references/example_*.json`: runnable examples
 - `scripts/run_backtest_from_schema.py`: runner
+- `scripts/schema_adapter.py`: translates human-friendly schema to internal format
+- `scripts/strategies/`: strategy template modules (`oversold_bounce`, `sma_crossover`, `trend_dip_buy`)
 - `scripts/ingest_yahoo_bundle.py`: optional ingestion helper
 
 ## License

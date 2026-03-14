@@ -1,6 +1,6 @@
-numpy==1.26.4
-scipy==1.15.3
-pandas>=2.2.0
+numpy>=1.26.4
+scipy>=1.15.3
+pandas>=2.2.0,<3.0.0
 polars>=1.0.0
-yfinance>=0.2.65
-ziplime
+yfinance>=0.2.65,<0.3.0
+ziplime @ git+https://github.com/Limex-com/ziplime.git

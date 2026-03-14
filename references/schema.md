@@ -1,68 +1,64 @@
 # Backtest Schema
 
-Use this constrained JSON format.
+Use this two-tier human-friendly format. The runner auto-translates it to its internal representation.
 
 ```json
 {
   "template": "oversold_bounce_long_only",
-  "symbol": "QQQ",
-  "bundle": "yahoo_5m_qqq",
-  "frequency_minutes": 5,
+  "symbols": ["QQQ"],
+  "frequency": "5min",
   "start": "2025-06-10",
   "end": "2025-07-31",
-  "timezone": "America/New_York",
   "initial_cash": 100000,
-  "benchmark_symbol": "QQQ",
-  "data": {
-    "source": "bundle",
-    "allow_yahoo_ingest": false,
-    "symbols": ["QQQ"]
-  },
-  "params": {
-    "ext_10": -0.30,
-    "ext_20": -0.40,
+
+  "strategy": {
+    "ema_extension": -0.30,
+    "sma_extension": -0.40,
     "min_down_days": 3,
-    "range_mult": 1.5,
-    "stop_buffer": 0.01,
     "max_hold_days": 3,
-    "min_price": 5.0,
-    "min_avg_daily_volume": 2000000,
     "entry_after_hour": 10,
     "entry_after_minute": 0
   },
-  "grid_search": {
-    "enabled": false,
-    "rank_by": "sharpe",
-    "top_n": 5,
-    "params": {
-      "ext_10": [-0.2, -0.3, -0.4],
-      "min_down_days": [3, 4, 5],
-      "max_hold_days": [2, 3, 5]
+
+  "advanced": {
+    "benchmark": "QQQ",
+    "allow_yahoo_ingest": false,
+    "min_price": 5.0,
+    "min_daily_volume": 2000000,
+    "range_mult": 1.5,
+    "stop_buffer": 0.01,
+
+    "execution": {
+      "slippage_bps": 5.0,
+      "commission_per_share": 0.001
+    },
+
+    "grid_search": {
+      "enabled": true,
+      "rank_by": "sharpe",
+      "top_n": 5,
+      "params": {
+        "ema_extension": [-0.2, -0.3, -0.4],
+        "min_down_days": [3, 4, 5],
+        "max_hold_days": [2, 3, 5]
+      }
+    },
+
+    "validation_split": {
+      "enabled": false,
+      "method": "date",
+      "split_date": "2025-07-01",
+      "gap_bars": 0,
+      "rank_on": "test_sharpe"
     }
-  },
-  "validation_split": {
-    "enabled": true,
-    "method": "date",
-    "split_date": "2025-07-01",
-    "gap_bars": 0,
-    "rank_on": "test_sharpe"
-  },
-  "live_data": {
-    "enabled": false,
-    "provider": "ibkr",
-    "host": "127.0.0.1",
-    "port": 7497,
-    "client_id": 1,
-    "account": "DUXXXXXX"
   }
 }
 ```
 
 ## Required fields
 - `template`
-- `symbol`
-- `bundle`
-- `frequency_minutes`
+- `symbols` (list, e.g. `["QQQ"]`)
+- `frequency`: `"daily"` | `"hourly"` | `"5min"` | `"1min"`
 - `start`, `end`
 
 ## Symbols and portfolio mode
@@ -81,34 +77,35 @@ Use this constrained JSON format.
   - `data.source = "custom"`
 - Reserved interfaces are validated and reported in output, but not executed by this runner.
 
-## Optional execution and cost config
-- `execution.max_leverage` (default `1.0`)
-- `execution.same_bar_execution` (default `false`)
-- `execution.price_used_in_order_execution` (`open|close|high|low`, default `close`)
-- `execution.costs.slippage_bps` (default `5.0`)
-- `execution.costs.volume_limit_fraction` (default `0.1`)
-- `execution.costs.commission_per_share_usd` (default `0.001`)
-- `execution.costs.commission_min_trade_usd` (default `0.0`)
+## Optional advanced config
 
-## Optional live interface reservation
-- `live_data.enabled`: include live-interface validation output
-- `live_data.provider`: currently supports reserved config for `ibkr`
-- `live_data.host`, `live_data.port`, `live_data.client_id`, `live_data.account`
-- This is a reserved interface only (no live trading runtime in this runner)
+**Execution costs** (`advanced.execution`):
+- `slippage_bps` (default `5.0`)
+- `commission_per_share` (default `0.001`)
 
-## Optional validation split
-- `validation_split.enabled`: enable train/test split output
-- `validation_split.method`: `date` or `ratio`
-- Date method fields:
-  - `split_date`: first day in test window
-  - `gap_bars` (default `0`): skip bars after split before test starts
-- Ratio method fields:
-  - `train_ratio` in `(0, 1)`
-  - `gap_bars` (default `0`)
-- `validation_split.rank_on`:
-  - no split: use `grid_search.rank_by`
-  - with split: defaults to `test_sharpe`
-  - supports `test_<metric>` or `train_<metric>` (for example: `test_sharpe`, `test_total_return`)
+**Grid search** (`advanced.grid_search`):
+- `enabled`: run a parameter sweep
+- `rank_by`: metric to rank results (`sharpe`, `total_return`, etc.)
+- `top_n`: number of top results to return
+- `params`: dict of human-friendly param name → list of values to sweep
+
+**Validation split** (`advanced.validation_split`):
+- `enabled`: enable train/test split output
+- `method`: `date` or `ratio`
+- Date method: `split_date` (first day of test window), `gap_bars` (default `0`)
+- Ratio method: `train_ratio` in `(0, 1)`, `gap_bars` (default `0`)
+- `rank_on`: defaults to `test_sharpe`; supports `test_<metric>` or `train_<metric>`
+
+**Filters and portfolio** (`advanced`):
+- `benchmark`: benchmark symbol (default: first symbol)
+- `timezone`: market timezone (default `America/New_York`)
+- `max_positions`: max simultaneous positions
+- `rank_by`: asset ranking metric
+- `rebalance`: `daily|weekly|monthly`
+- `min_price`, `min_daily_volume`: entry filters
+- `slope_lookback`, `bounce_range_ratio`: trend-dip specific
+- `range_mult`, `stop_buffer`: oversold-bounce specific
+- `allow_yahoo_ingest`: auto-download data if bundle is missing
 
 ## Supported templates
 - `oversold_bounce_long_only`
@@ -121,19 +118,24 @@ Use this constrained JSON format.
 - `references/example_trend_dip_single_schema.json`
 - `references/example_trend_dip_grid_schema.json`
 
-## Parameter notes
-- `oversold_bounce_long_only` uses `params` keys:
-  - `ext_10`, `ext_20`, `min_down_days`, `range_mult`, `stop_buffer`, `max_hold_days`
-  - optional filters: `min_price`, `min_avg_daily_volume`
-- `sma_crossover_long_only` uses:
-  - `short_window`, `long_window`
-  - portfolio controls: `max_positions`, `rank_metric` (`ma_ratio|one_bar_return`), `rebalance_rule` (`daily|weekly|monthly`)
-- `trend_dip_buy_long_only` uses:
-  - `sma_fast_period`, `sma_med_period`, `sma_slow_period`, `slope_lookback`
-  - `touch_ma` (`sma_fast|sma_med|sma_slow`), `bounce_range_ratio`
-  - `exit_below_ma` (`sma_fast|sma_med|sma_slow`)
-  - optional filters: `min_price`, `min_avg_daily_volume`
-  - portfolio controls: `max_positions`, `rank_metric` (`trend_strength|close_vs_sma_slow|volume_ratio`), `rebalance_rule` (`daily|weekly|monthly`)
+## Strategy block parameters
+
+`oversold_bounce_long_only`:
+- `ema_extension`, `sma_extension` — extension thresholds (e.g. `-0.30`, `-0.40`)
+- `min_down_days`, `max_hold_days`
+- `entry_after_hour`, `entry_after_minute` — time gate for entries (24h clock)
+- advanced filters: `min_price`, `min_daily_volume`, `range_mult`, `stop_buffer`
+
+`sma_crossover_long_only`:
+- `short_ma`, `long_ma`
+- advanced portfolio controls: `max_positions`, `rank_by` (`ma_ratio|one_bar_return`), `rebalance` (`daily|weekly|monthly`)
+
+`trend_dip_buy_long_only`:
+- `fast_ma`, `medium_ma`, `slow_ma`
+- `entry_on` (`fast|medium|slow`), `exit_below` (`fast|medium|slow`)
+- advanced: `slope_lookback`, `bounce_range_ratio`
+- advanced filters: `min_price`, `min_daily_volume`
+- advanced portfolio controls: `max_positions`, `rank_by` (`trend_strength|close_vs_sma_slow|volume_ratio`), `rebalance` (`daily|weekly|monthly`)
 
 ## Output
 The runner prints JSON with:

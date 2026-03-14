@@ -1,52 +1,51 @@
 {
+  "_description": "Oversold Bounce strategy — intraday QQQ on 5-minute bars. Enters after a sharp extension below EMA/SMA; exits after a fixed hold period. Grid search sweeps extension thresholds and hold time.",
+
   "template": "oversold_bounce_long_only",
-  "symbol": "QQQ",
-  "bundle": "yahoo_5m_qqq",
-  "frequency_minutes": 5,
+  "symbols": ["QQQ"],
+  "frequency": "5min",
   "start": "2025-06-10",
   "end": "2025-07-31",
-  "timezone": "America/New_York",
   "initial_cash": 100000,
-  "benchmark_symbol": "QQQ",
-  "data": {
-    "source": "bundle",
-    "allow_yahoo_ingest": false,
-    "symbols": [
-      "QQQ"
-    ]
-  },
-  "params": {
-    "ext_10": -0.3,
-    "ext_20": -0.4,
+
+  "strategy": {
+    "ema_extension": -0.3,
+    "sma_extension": -0.4,
     "min_down_days": 3,
-    "range_mult": 1.5,
-    "stop_buffer": 0.01,
     "max_hold_days": 3,
-    "min_price": 5.0,
-    "min_avg_daily_volume": 2000000,
     "entry_after_hour": 10,
     "entry_after_minute": 0
   },
-  "grid_search": {
-    "enabled": true,
-    "rank_by": "sharpe",
-    "top_n": 5,
-    "params": {
-      "ext_10": [
-        -0.2,
-        -0.3,
-        -0.4
-      ],
-      "min_down_days": [
-        3,
-        4,
-        5
-      ],
-      "max_hold_days": [
-        2,
-        3,
-        5
-      ]
+
+  "advanced": {
+    "benchmark": "QQQ",
+    "allow_yahoo_ingest": false,
+    "min_price": 5.0,
+    "min_daily_volume": 2000000,
+    "range_mult": 1.5,
+    "stop_buffer": 0.01,
+
+    "execution": {
+      "slippage_bps": 5.0,
+      "commission_per_share": 0.001
+    },
+
+    "grid_search": {
+      "enabled": true,
+      "rank_by": "sharpe",
+      "top_n": 5,
+      "params": {
+        "ema_extension": [-0.2, -0.3, -0.4],
+        "min_down_days": [3, 4, 5],
+        "max_hold_days": [2, 3, 5]
+      }
+    },
+
+    "validation_split": {
+      "enabled": false,
+      "method": "date",
+      "split_date": "2025-07-01",
+      "rank_on": "test_sharpe"
     }
   }
 }
