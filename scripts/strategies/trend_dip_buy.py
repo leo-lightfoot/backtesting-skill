@@ -87,10 +87,11 @@ async def handle_data(context, data):
         return
 
     candidates = []
+    desired_assets = []
     metric = str(PARAMS["rank_metric"])
     for asset in assets:
         frame = hist.filter(pl.col("sid") == asset.sid)
-        pos = getattr(context.portfolio.positions.get(asset, 0), "amount", 0)
+        pos = context.portfolio.positions[asset].amount if asset in context.portfolio.positions else 0
         in_position = pos > 0
 
         if frame.is_empty():
@@ -170,13 +171,13 @@ async def handle_data(context, data):
 
     candidates.sort(key=lambda x: x[0], reverse=True)
     max_positions = max(1, int(PARAMS["max_positions"]))
-    desired_assets = [asset for _, asset in candidates[:max_positions]]
+    desired_assets += [asset for _, asset in candidates[:max_positions]]
 
     desired_sids = {a.sid for a in desired_assets}
     target = (1.0 / len(desired_assets)) if len(desired_assets) > 0 else 0.0
 
     for asset in assets:
-        pos = getattr(context.portfolio.positions.get(asset, 0), "amount", 0)
+        pos = context.portfolio.positions[asset].amount if asset in context.portfolio.positions else 0
         if asset.sid in desired_sids:
             await context.order_target_percent(asset=asset, target=target, style=MarketOrder())
         elif pos > 0:

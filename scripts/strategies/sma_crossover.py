@@ -92,7 +92,7 @@ async def handle_data(context, data):
     target = (1.0 / len(desired_assets)) if len(desired_assets) > 0 else 0.0
 
     for asset in assets:
-        pos = getattr(context.portfolio.positions.get(asset, 0), "amount", 0)
+        pos = context.portfolio.positions[asset].amount if asset in context.portfolio.positions else 0
         if asset.sid in desired_sids:
             await context.order_target_percent(asset=asset, target=target, style=MarketOrder())
         elif pos > 0:

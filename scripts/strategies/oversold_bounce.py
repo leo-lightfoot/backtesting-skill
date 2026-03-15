@@ -91,8 +91,8 @@ def _compute_setup(daily):
     sma20 = _sma_last(closes, int(PARAMS["sma_period"]))
     adr20 = float(np.mean((highs - lows)[-20:]))
 
-    ext_10 = (last_close - ema10) / ema10 if ema10 and not np.isnan(ema10) else float("nan")
-    ext_20 = (last_close - sma20) / sma20 if sma20 and not np.isnan(sma20) else float("nan")
+    ext_10 = (last_close - ema10) / ema10 if not np.isnan(ema10) and ema10 != 0.0 else float("nan")
+    ext_20 = (last_close - sma20) / sma20 if not np.isnan(sma20) and sma20 != 0.0 else float("nan")
     down_days = _consecutive_down(closes)
 
     ok_base = (last_close >= float(PARAMS["min_price"])) and (avg_vol_20 >= float(PARAMS["min_avg_daily_volume"]))
@@ -179,7 +179,7 @@ async def handle_data(context, data):
     context.vwap_den += cur_vol
     vwap = context.vwap_num / context.vwap_den if context.vwap_den > 0 else float("nan")
 
-    position_amount = getattr(context.portfolio.positions.get(asset, 0), "amount", 0)
+    position_amount = context.portfolio.positions[asset].amount if asset in context.portfolio.positions else 0
     in_position = position_amount > 0
 
     stop_price = context.lod * (1.0 - float(PARAMS["stop_buffer"])) if context.lod is not None else None

@@ -1,0 +1,48 @@
+{
+  "_description": "RSI Mean Reversion — buys QQQ when RSI(14) drops below 30 while price is above the 200-day SMA. Exits when RSI recovers above 60 or after 20 bars. Trend filter avoids buying into sustained downtrends.",
+
+  "template": "rsi_mean_reversion_long_only",
+  "symbols": ["QQQ"],
+  "frequency": "daily",
+  "start": "2018-01-02",
+  "end": "2026-03-10",
+  "initial_cash": 100000,
+
+  "strategy": {
+    "rsi_period": 14,
+    "oversold_threshold": 30,
+    "exit_rsi": 60,
+    "trend_filter_period": 200,
+    "max_hold_days": 20
+  },
+
+  "advanced": {
+    "benchmark": "QQQ",
+    "allow_yahoo_ingest": true,
+    "min_price": 5.0,
+    "min_daily_volume": 2000000,
+
+    "execution": {
+      "slippage_bps": 5.0,
+      "commission_per_share": 0.001
+    },
+
+    "grid_search": {
+      "enabled": false,
+      "rank_by": "sharpe",
+      "top_n": 5,
+      "params": {
+        "rsi_period": [10, 14, 20],
+        "oversold_threshold": [25, 30, 35],
+        "exit_rsi": [55, 60, 65]
+      }
+    },
+
+    "validation_split": {
+      "enabled": false,
+      "method": "date",
+      "split_date": "2023-01-01",
+      "rank_on": "test_sharpe"
+    }
+  }
+}

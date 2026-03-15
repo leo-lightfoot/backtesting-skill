@@ -127,6 +127,15 @@ _PARAM_KEY_MAP: dict[str, dict[str, str]] = {
         "range_mult":          "range_mult",
         "stop_buffer":         "stop_buffer",
     },
+    "rsi_mean_reversion_long_only": {
+        "rsi_period":           "rsi_period",
+        "oversold_threshold":   "oversold_threshold",
+        "exit_rsi":             "exit_rsi",
+        "trend_filter_period":  "trend_filter_period",
+        "max_hold_days":        "max_hold_days",
+        "min_price":            "min_price",
+        "min_daily_volume":     "min_avg_daily_volume",
+    },
 }
 
 # Param keys whose values also need translating through _MA_NAME_MAP
@@ -235,6 +244,14 @@ def normalize_schema(schema: dict[str, Any]) -> dict[str, Any]:
             params["entry_after_hour"] = int(strategy["entry_after_hour"])
         if "entry_after_minute" in strategy:
             params["entry_after_minute"] = int(strategy["entry_after_minute"])
+
+    elif template == "rsi_mean_reversion_long_only":
+        for key in ("rsi_period", "trend_filter_period", "max_hold_days"):
+            if key in strategy:
+                params[key] = int(strategy[key])
+        for key in ("oversold_threshold", "exit_rsi"):
+            if key in strategy:
+                params[key] = float(strategy[key])
 
     # advanced → params
     for key in ("min_price", "slope_lookback", "bounce_range_ratio", "range_mult", "stop_buffer"):

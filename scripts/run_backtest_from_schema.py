@@ -61,6 +61,11 @@ def resolve_validation_split(schema: dict[str, Any]) -> dict[str, Any] | None:
         split_offset = int(round(total_days * train_ratio))
         split_offset = max(1, min(total_days - 1, split_offset))
         split_date = start_date + dt.timedelta(days=split_offset)
+        # Advance to Monday if split lands on a weekend
+        if split_date.weekday() == 5:  # Saturday
+            split_date += dt.timedelta(days=2)
+        elif split_date.weekday() == 6:  # Sunday
+            split_date += dt.timedelta(days=1)
     else:
         raise ValueError("validation_split.method must be 'date' or 'ratio'")
 
@@ -452,6 +457,14 @@ def build_params(
         defaults["rebalance_rule"] = rebalance_rule
 
         defaults["rank_metric"] = str(defaults.get("rank_metric", "ma_ratio"))
+
+    if template == "sma_crossover_long_only":
+        short_w = int(defaults.get("short_window", 50))
+        long_w = int(defaults.get("long_window", 200))
+        if short_w >= long_w:
+            raise ValueError(
+                f"sma_crossover: short_ma ({short_w}) must be less than long_ma ({long_w})"
+            )
 
     return defaults
 

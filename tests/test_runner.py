@@ -16,9 +16,13 @@ def _load_runner_module():
     return module
 
 
-class TrendDipTemplateTests(unittest.TestCase):
+class RunnerTests(unittest.TestCase):
     def setUp(self):
         self.runner = _load_runner_module()
+
+    # ------------------------------------------------------------------
+    # Algorithm source compilation
+    # ------------------------------------------------------------------
 
     def test_make_algorithm_source_supports_trend_template(self):
         params = {
@@ -60,6 +64,30 @@ class TrendDipTemplateTests(unittest.TestCase):
         source = self.runner.make_algorithm_source("oversold_bounce_long_only", params)
         self.assertIn("context.asset =", source)
 
+    def test_make_algorithm_source_supports_rsi_template(self):
+        params = {
+            "symbol": "QQQ",
+            "symbols": ["QQQ"],
+            "frequency_minutes": 1440,
+            "market_tz": "America/New_York",
+            "rsi_period": 14,
+            "oversold_threshold": 30.0,
+            "exit_rsi": 60.0,
+            "trend_filter_period": 200,
+            "max_hold_days": 20,
+            "min_price": 5.0,
+            "min_avg_daily_volume": 2000000,
+        }
+        source = self.runner.make_algorithm_source("rsi_mean_reversion_long_only", params)
+        self.assertIn("PARAMS =", source)
+        self.assertIn("_rsi", source)
+        self.assertIn("oversold_threshold", source)
+        self.assertIn("trend_filter_period", source)
+
+    # ------------------------------------------------------------------
+    # build_params — defaults and validation
+    # ------------------------------------------------------------------
+
     def test_build_params_defaults_for_trend_template(self):
         schema = {
             "template": "trend_dip_buy_long_only",
@@ -76,6 +104,103 @@ class TrendDipTemplateTests(unittest.TestCase):
         self.assertEqual(params["sma_slow_period"], 50)
         self.assertEqual(params["touch_ma"], "sma_fast")
         self.assertEqual(params["exit_below_ma"], "sma_med")
+
+    def test_build_params_defaults_for_rsi_template(self):
+        schema = {
+            "template": "rsi_mean_reversion_long_only",
+            "symbol": "QQQ",
+            "frequency_minutes": 1440,
+            "timezone": "America/New_York",
+            "params": {},
+        }
+        params = self.runner.build_params(schema)
+        self.assertEqual(params["symbol"], "QQQ")
+        self.assertEqual(params["rsi_period"], 14)
+        self.assertEqual(params["oversold_threshold"], 30.0)
+        self.assertEqual(params["exit_rsi"], 60.0)
+        self.assertEqual(params["trend_filter_period"], 200)
+        self.assertEqual(params["max_hold_days"], 20)
+
+    def test_build_params_uses_data_symbols_for_sma(self):
+        schema = {
+            "template": "sma_crossover_long_only",
+            "symbol": "QQQ",
+            "frequency_minutes": 1440,
+            "data": {"symbols": ["AAPL", "MSFT", "NVDA"]},
+            "params": {},
+        }
+        params = self.runner.build_params(schema)
+        self.assertEqual(params["symbols"], ["AAPL", "MSFT", "NVDA"])
+
+    def test_build_params_has_portfolio_controls_for_sma(self):
+        schema = {
+            "template": "sma_crossover_long_only",
+            "symbol": "QQQ",
+            "frequency_minutes": 1440,
+            "timezone": "America/New_York",
+            "data": {"symbols": ["AAPL", "MSFT", "NVDA"]},
+            "params": {},
+        }
+        params = self.runner.build_params(schema)
+        self.assertEqual(params["max_positions"], 3)
+        self.assertEqual(params["rank_metric"], "ma_ratio")
+        self.assertEqual(params["rebalance_rule"], "daily")
+
+    def test_build_params_has_portfolio_controls_for_trend(self):
+        schema = {
+            "template": "trend_dip_buy_long_only",
+            "symbol": "QQQ",
+            "frequency_minutes": 1440,
+            "timezone": "America/New_York",
+            "data": {"symbols": ["QQQ", "SPY"]},
+            "params": {},
+        }
+        params = self.runner.build_params(schema)
+        self.assertEqual(params["max_positions"], 2)
+        self.assertEqual(params["rank_metric"], "trend_strength")
+        self.assertEqual(params["rebalance_rule"], "daily")
+
+    def test_build_params_supports_rebalance_and_max_positions_override(self):
+        schema = {
+            "template": "trend_dip_buy_long_only",
+            "symbol": "QQQ",
+            "frequency_minutes": 1440,
+            "timezone": "America/New_York",
+            "data": {"symbols": ["QQQ", "SPY", "IWM"]},
+            "params": {
+                "max_positions": 1,
+                "rebalance_rule": "weekly",
+                "rank_metric": "close_vs_sma_slow",
+            },
+        }
+        params = self.runner.build_params(schema)
+        self.assertEqual(params["max_positions"], 1)
+        self.assertEqual(params["rebalance_rule"], "weekly")
+        self.assertEqual(params["rank_metric"], "close_vs_sma_slow")
+
+    def test_build_params_rejects_invalid_rebalance_rule(self):
+        schema = {
+            "template": "sma_crossover_long_only",
+            "symbol": "QQQ",
+            "frequency_minutes": 1440,
+            "params": {"rebalance_rule": "hourly"},
+        }
+        with self.assertRaises(ValueError):
+            self.runner.build_params(schema)
+
+    def test_build_params_rejects_sma_crossover_short_ge_long(self):
+        schema = {
+            "template": "sma_crossover_long_only",
+            "symbol": "QQQ",
+            "frequency_minutes": 1440,
+            "params": {"short_window": 200, "long_window": 50},
+        }
+        with self.assertRaises(ValueError):
+            self.runner.build_params(schema)
+
+    # ------------------------------------------------------------------
+    # Yahoo download wrapper
+    # ------------------------------------------------------------------
 
     def test_yahoo_download_wrapper_flattens_multiindex(self):
         calls = []
@@ -137,6 +262,10 @@ class TrendDipTemplateTests(unittest.TestCase):
 
         self.assertTrue(calls[0]["multi_level_index"])
 
+    # ------------------------------------------------------------------
+    # Date utilities
+    # ------------------------------------------------------------------
+
     def test_parse_date_supports_end_of_day(self):
         start_dt = self.runner.parse_date("2026-03-10", "America/New_York")
         end_dt = self.runner.parse_date(
@@ -145,6 +274,10 @@ class TrendDipTemplateTests(unittest.TestCase):
 
         self.assertEqual((start_dt.hour, start_dt.minute), (0, 0))
         self.assertEqual((end_dt.hour, end_dt.minute), (23, 59))
+
+    # ------------------------------------------------------------------
+    # Practical assessment
+    # ------------------------------------------------------------------
 
     def test_practical_assessment_has_global_required_sections(self):
         schema = {
@@ -198,6 +331,39 @@ class TrendDipTemplateTests(unittest.TestCase):
         self.assertEqual(overfit["grid_trials"], 16)
         self.assertEqual(overfit["sharpe_gap_top1_top2"], 0.03)
 
+    def test_practical_assessment_reads_execution_config(self):
+        schema = {
+            "symbol": "QQQ",
+            "execution": {
+                "same_bar_execution": True,
+                "price_used_in_order_execution": "open",
+                "costs": {
+                    "slippage_bps": 9.0,
+                    "volume_limit_fraction": 0.3,
+                    "commission_per_share_usd": 0.004,
+                },
+            },
+        }
+        assessment = self.runner.build_practical_assessment(
+            schema=schema,
+            params={"min_price": 5.0, "min_avg_daily_volume": 2_000_000},
+            metrics={"sharpe": 0.7},
+        )
+
+        self.assertTrue(assessment["future_leakage"]["same_bar_execution"])
+        self.assertEqual(assessment["future_leakage"]["execution_price"], "open")
+        self.assertEqual(assessment["slippage_commission"]["slippage_bps"], 9.0)
+        self.assertEqual(
+            assessment["slippage_commission"]["volume_limit_fraction"], 0.3
+        )
+        self.assertEqual(
+            assessment["slippage_commission"]["commission_per_share_usd"], 0.004
+        )
+
+    # ------------------------------------------------------------------
+    # Validation split
+    # ------------------------------------------------------------------
+
     def test_resolve_validation_split_date_method(self):
         schema = {
             "start": "2024-01-01",
@@ -234,10 +400,16 @@ class TrendDipTemplateTests(unittest.TestCase):
         split = self.runner.resolve_validation_split(schema)
         self.assertIsNotNone(split)
         self.assertEqual(split["train"]["start"], "2024-01-01")
-        self.assertEqual(split["train"]["end"], "2024-01-06")
-        self.assertEqual(split["test"]["start"], "2024-01-07")
+        # split_date=2024-01-07 (Sun) is advanced to Mon 2024-01-08;
+        # train_end = 2024-01-07, test_start = 2024-01-08
+        self.assertEqual(split["train"]["end"], "2024-01-07")
+        self.assertEqual(split["test"]["start"], "2024-01-08")
         self.assertEqual(split["test"]["end"], "2024-01-11")
         self.assertEqual(split["rank_on"], "test_sharpe")
+
+    # ------------------------------------------------------------------
+    # Grid utilities
+    # ------------------------------------------------------------------
 
     def test_get_rank_metric_supports_test_prefix(self):
         row = {
@@ -278,6 +450,24 @@ class TrendDipTemplateTests(unittest.TestCase):
         self.assertEqual(out[0]["rank_value"], 0.4)
         self.assertEqual(out[1]["rank_value"], 0.9)
         self.assertEqual(out[2]["rank_value"], 0.1)
+
+    def test_build_stability_diagnostics_basic(self):
+        rows = [
+            {"params": {"a": 1}, "metrics": {"sharpe": 1.1}},
+            {"params": {"a": 1}, "metrics": {"sharpe": 1.0}},
+            {"params": {"a": 2}, "metrics": {"sharpe": 0.9}},
+            {"params": {"a": 3}, "metrics": {"sharpe": 0.5}},
+        ]
+        out = self.runner.build_stability_diagnostics(rows, rank_by="sharpe", top_k=3)
+        self.assertEqual(out["top_k"], 3)
+        self.assertEqual(out["rank_metric"], "sharpe")
+        self.assertEqual(out["top1"], 1.1)
+        self.assertIn("parameter_concentration", out)
+        self.assertIn("stability_label", out)
+
+    # ------------------------------------------------------------------
+    # Trade summary
+    # ------------------------------------------------------------------
 
     def test_extract_trade_summary_from_perf(self):
         perf = pd.DataFrame(
@@ -356,6 +546,10 @@ class TrendDipTemplateTests(unittest.TestCase):
         self.assertEqual(summary["trade_count"], 1)
         self.assertAlmostEqual(summary["avg_trade_return"], 0.10, places=6)
 
+    # ------------------------------------------------------------------
+    # Execution config
+    # ------------------------------------------------------------------
+
     def test_build_execution_config_defaults(self):
         cfg = self.runner.build_execution_config({})
         self.assertEqual(cfg["max_leverage"], 1.0)
@@ -389,115 +583,9 @@ class TrendDipTemplateTests(unittest.TestCase):
         self.assertEqual(cfg["commission_per_share_usd"], 0.002)
         self.assertEqual(cfg["commission_min_trade_usd"], 1.0)
 
-    def test_build_params_uses_data_symbols_for_sma(self):
-        schema = {
-            "template": "sma_crossover_long_only",
-            "symbol": "QQQ",
-            "frequency_minutes": 1440,
-            "data": {"symbols": ["AAPL", "MSFT", "NVDA"]},
-            "params": {},
-        }
-        params = self.runner.build_params(schema)
-        self.assertEqual(params["symbols"], ["AAPL", "MSFT", "NVDA"])
-
-    def test_build_params_has_portfolio_controls_for_sma(self):
-        schema = {
-            "template": "sma_crossover_long_only",
-            "symbol": "QQQ",
-            "frequency_minutes": 1440,
-            "timezone": "America/New_York",
-            "data": {"symbols": ["AAPL", "MSFT", "NVDA"]},
-            "params": {},
-        }
-        params = self.runner.build_params(schema)
-        self.assertEqual(params["max_positions"], 3)
-        self.assertEqual(params["rank_metric"], "ma_ratio")
-        self.assertEqual(params["rebalance_rule"], "daily")
-
-    def test_build_params_has_portfolio_controls_for_trend(self):
-        schema = {
-            "template": "trend_dip_buy_long_only",
-            "symbol": "QQQ",
-            "frequency_minutes": 1440,
-            "timezone": "America/New_York",
-            "data": {"symbols": ["QQQ", "SPY"]},
-            "params": {},
-        }
-        params = self.runner.build_params(schema)
-        self.assertEqual(params["max_positions"], 2)
-        self.assertEqual(params["rank_metric"], "trend_strength")
-        self.assertEqual(params["rebalance_rule"], "daily")
-
-    def test_build_params_supports_rebalance_and_max_positions_override(self):
-        schema = {
-            "template": "trend_dip_buy_long_only",
-            "symbol": "QQQ",
-            "frequency_minutes": 1440,
-            "timezone": "America/New_York",
-            "data": {"symbols": ["QQQ", "SPY", "IWM"]},
-            "params": {
-                "max_positions": 1,
-                "rebalance_rule": "weekly",
-                "rank_metric": "close_vs_sma_slow",
-            },
-        }
-        params = self.runner.build_params(schema)
-        self.assertEqual(params["max_positions"], 1)
-        self.assertEqual(params["rebalance_rule"], "weekly")
-        self.assertEqual(params["rank_metric"], "close_vs_sma_slow")
-
-    def test_build_params_rejects_invalid_rebalance_rule(self):
-        schema = {
-            "template": "sma_crossover_long_only",
-            "symbol": "QQQ",
-            "frequency_minutes": 1440,
-            "params": {"rebalance_rule": "hourly"},
-        }
-        with self.assertRaises(ValueError):
-            self.runner.build_params(schema)
-
-    def test_practical_assessment_reads_execution_config(self):
-        schema = {
-            "symbol": "QQQ",
-            "execution": {
-                "same_bar_execution": True,
-                "price_used_in_order_execution": "open",
-                "costs": {
-                    "slippage_bps": 9.0,
-                    "volume_limit_fraction": 0.3,
-                    "commission_per_share_usd": 0.004,
-                },
-            },
-        }
-        assessment = self.runner.build_practical_assessment(
-            schema=schema,
-            params={"min_price": 5.0, "min_avg_daily_volume": 2_000_000},
-            metrics={"sharpe": 0.7},
-        )
-
-        self.assertTrue(assessment["future_leakage"]["same_bar_execution"])
-        self.assertEqual(assessment["future_leakage"]["execution_price"], "open")
-        self.assertEqual(assessment["slippage_commission"]["slippage_bps"], 9.0)
-        self.assertEqual(
-            assessment["slippage_commission"]["volume_limit_fraction"], 0.3
-        )
-        self.assertEqual(
-            assessment["slippage_commission"]["commission_per_share_usd"], 0.004
-        )
-
-    def test_build_stability_diagnostics_basic(self):
-        rows = [
-            {"params": {"a": 1}, "metrics": {"sharpe": 1.1}},
-            {"params": {"a": 1}, "metrics": {"sharpe": 1.0}},
-            {"params": {"a": 2}, "metrics": {"sharpe": 0.9}},
-            {"params": {"a": 3}, "metrics": {"sharpe": 0.5}},
-        ]
-        out = self.runner.build_stability_diagnostics(rows, rank_by="sharpe", top_k=3)
-        self.assertEqual(out["top_k"], 3)
-        self.assertEqual(out["rank_metric"], "sharpe")
-        self.assertEqual(out["top1"], 1.1)
-        self.assertIn("parameter_concentration", out)
-        self.assertIn("stability_label", out)
+    # ------------------------------------------------------------------
+    # Risk, capacity, data and live interfaces
+    # ------------------------------------------------------------------
 
     def test_build_risk_attribution_from_perf(self):
         perf = pd.DataFrame(
@@ -513,6 +601,44 @@ class TrendDipTemplateTests(unittest.TestCase):
         self.assertIn("capture_up", out)
         self.assertIn("capture_down", out)
         self.assertIn("rolling_sharpe_63_end", out)
+
+    def test_build_capacity_diagnostics_from_perf(self):
+        perf = pd.DataFrame(
+            {
+                "portfolio_value": [100000.0, 101000.0, 100500.0],
+                "transactions": [
+                    [{"sid": 1, "amount": 10, "price": 100.0}],
+                    [{"sid": 1, "amount": -5, "price": 102.0}],
+                    [],
+                ],
+            }
+        )
+        params = {
+            "min_avg_daily_volume": 2_000_000,
+            "min_price": 5.0,
+        }
+        out = self.runner.build_capacity_diagnostics_from_perf(perf, params)
+        self.assertIn("avg_daily_trade_notional", out)
+        self.assertIn("avg_daily_turnover", out)
+        self.assertIn("annualized_turnover", out)
+        self.assertIn("participation_vs_adv_floor", out)
+        self.assertIn("participation_risk", out)
+        self.assertIsNotNone(out["participation_vs_adv_floor"])
+
+    def test_build_capacity_diagnostics_without_adv_floor(self):
+        perf = pd.DataFrame(
+            {
+                "portfolio_value": [100000.0, 101000.0],
+                "transactions": [
+                    [{"sid": 1, "amount": 10, "price": 100.0}],
+                    [{"sid": 1, "amount": -10, "price": 100.0}],
+                ],
+            }
+        )
+        out = self.runner.build_capacity_diagnostics_from_perf(perf, params={})
+        self.assertIsNone(out["adv_floor_dollar"])
+        self.assertIsNone(out["participation_vs_adv_floor"])
+        self.assertEqual(out["participation_risk"], "not_assessed")
 
     def test_build_live_interface_reserved(self):
         schema = {
@@ -560,44 +686,6 @@ class TrendDipTemplateTests(unittest.TestCase):
         out = self.runner.build_data_interface(schema)
         self.assertEqual(out["status"], "reserved_interface_only")
         self.assertIn("required_fields_missing", out)
-
-    def test_build_capacity_diagnostics_from_perf(self):
-        perf = pd.DataFrame(
-            {
-                "portfolio_value": [100000.0, 101000.0, 100500.0],
-                "transactions": [
-                    [{"sid": 1, "amount": 10, "price": 100.0}],
-                    [{"sid": 1, "amount": -5, "price": 102.0}],
-                    [],
-                ],
-            }
-        )
-        params = {
-            "min_avg_daily_volume": 2_000_000,
-            "min_price": 5.0,
-        }
-        out = self.runner.build_capacity_diagnostics_from_perf(perf, params)
-        self.assertIn("avg_daily_trade_notional", out)
-        self.assertIn("avg_daily_turnover", out)
-        self.assertIn("annualized_turnover", out)
-        self.assertIn("participation_vs_adv_floor", out)
-        self.assertIn("participation_risk", out)
-        self.assertIsNotNone(out["participation_vs_adv_floor"])
-
-    def test_build_capacity_diagnostics_without_adv_floor(self):
-        perf = pd.DataFrame(
-            {
-                "portfolio_value": [100000.0, 101000.0],
-                "transactions": [
-                    [{"sid": 1, "amount": 10, "price": 100.0}],
-                    [{"sid": 1, "amount": -10, "price": 100.0}],
-                ],
-            }
-        )
-        out = self.runner.build_capacity_diagnostics_from_perf(perf, params={})
-        self.assertIsNone(out["adv_floor_dollar"])
-        self.assertIsNone(out["participation_vs_adv_floor"])
-        self.assertEqual(out["participation_risk"], "not_assessed")
 
 
 if __name__ == "__main__":
