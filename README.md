@@ -43,6 +43,9 @@ python scripts/run_backtest_from_schema.py --schema references/example_rsi_schem
 
 # Auto-download data if bundle is missing (requires allow_yahoo_ingest: true in schema)
 python scripts/run_backtest_from_schema.py --schema references/example_trend_dip_single_schema.json --ingest-if-missing
+
+# Write output to a file instead of stdout
+python scripts/run_backtest_from_schema.py --schema references/example_trend_dip_single_schema.json --output results/trend_dip.json
 ```
 
 ## Schema Format
@@ -116,7 +119,7 @@ Grid mode adds `top_results` and `stability_diagnostics`.
 ## Install as an Agent Skill
 
 ```bash
-npx skills add https://github.com/garroshub/backtesting-skill -a opencode -y
+npx skills add https://github.com/leo-lightfoot/backtesting-skill -a opencode -y
 ```
 
 ## Project Layout

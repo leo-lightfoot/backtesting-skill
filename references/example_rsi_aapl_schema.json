@@ -1,8 +1,8 @@
 {
-  "_description": "RSI Mean Reversion — buys QQQ when RSI(14) drops below 30 while price is above the 200-day SMA. Exits when RSI recovers above 60 or after 20 bars. Trend filter avoids buying into sustained downtrends.",
+  "_description": "RSI Mean Reversion on AAPL — same logic as QQQ version, benchmark vs SPY.",
 
   "template": "rsi_mean_reversion_long_only",
-  "symbols": ["QQQ"],
+  "symbols": ["AAPL"],
   "frequency": "daily",
   "start": "2015-01-02",
   "end": "2026-03-10",
@@ -17,10 +17,10 @@
   },
 
   "advanced": {
-    "benchmark": "QQQ",
-    "allow_yahoo_ingest": true,
+    "benchmark": "AAPL",
+    "allow_yahoo_ingest": false,
     "min_price": 5.0,
-    "min_daily_volume": 2000000,
+    "min_daily_volume": 1000000,
 
     "execution": {
       "slippage_bps": 5.0,

@@ -1546,6 +1546,18 @@ async def run_grid(
     }
 
 
+def _emit(payload: dict, output_path: str | None) -> None:
+    """Write JSON output to a file if --output was given, otherwise print to stdout."""
+    text = json.dumps(payload, indent=2)
+    if output_path:
+        out_file = Path(output_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(text, encoding="utf-8")
+        print(f"Output written to {out_file.resolve()}", flush=True)
+    else:
+        print(text)
+
+
 async def async_main(args):
     schema_path = Path(args.schema).resolve()
     schema = normalize_schema(json.loads(schema_path.read_text(encoding="utf-8")))
@@ -1574,19 +1586,17 @@ async def async_main(args):
                     compile(s, "generated_algorithm_grid.py", "exec")
                     validated_grid += 1
 
-        print(
-            json.dumps(
-                {
-                    "mode": "validate_only",
-                    "template": schema["template"],
-                    "schema_ok": True,
-                    "validation_split": validation,
-                    "data_interface": data_interface,
-                    "live_interface": live_interface,
-                    "grid_variants_compiled": validated_grid,
-                },
-                indent=2,
-            )
+        _emit(
+            {
+                "mode": "validate_only",
+                "template": schema["template"],
+                "schema_ok": True,
+                "validation_split": validation,
+                "data_interface": data_interface,
+                "live_interface": live_interface,
+                "grid_variants_compiled": validated_grid,
+            },
+            args.output,
         )
         return
 
@@ -1607,7 +1617,7 @@ async def async_main(args):
             {"mode": "grid", "backtest_window": backtest_window, **res}
         )
         out["data_interface"] = data_interface
-        print(json.dumps(out, indent=2))
+        _emit(out, args.output)
     else:
         if validation is None:
             res = await run_once(schema, data_dir=data_dir)
@@ -1662,7 +1672,7 @@ async def async_main(args):
             )
         if validation is None:
             out["data_interface"] = data_interface
-        print(json.dumps(out, indent=2))
+        _emit(out, args.output)
 
 
 def main():
@@ -1680,6 +1690,11 @@ def main():
         "--validate-only",
         action="store_true",
         help="Validate schema and compile generated algorithm without running ziplime backtest",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Write JSON output to this file path instead of stdout (e.g. results/out.json)",
     )
     args = parser.parse_args()
     asyncio.run(async_main(args))
