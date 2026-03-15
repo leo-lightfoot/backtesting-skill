@@ -12,7 +12,7 @@ New format fields
 Top level (required):
   template        str   — same as internal
   symbols         list  — e.g. ["QQQ"] or ["QQQ", "SPY"]
-  frequency       str   — "daily" | "5min" | "1min" | "hourly"
+  frequency       str   — "daily" | "hourly"
   start           str   — "YYYY-MM-DD"
   end             str   — "YYYY-MM-DD"
   initial_cash    float — e.g. 100000
@@ -29,16 +29,6 @@ strategy block (template-specific, human-readable names):
     short_ma        int    — short SMA period
     long_ma         int    — long SMA period
 
-  oversold_bounce_long_only:
-    ema_period        int    — EMA period for extension calc
-    sma_period        int    — SMA period for extension calc
-    ema_extension     float  — e.g. -0.30 (how far below EMA to trigger)
-    sma_extension     float  — e.g. -0.40 (how far below SMA to trigger)
-    min_down_days     int    — consecutive down days required
-    max_hold_days     int    — max bars to hold position
-    entry_after_hour  int    — hour after which entries are allowed (24h, e.g. 10)
-    entry_after_minute int   — minute after which entries are allowed (e.g. 0)
-
 advanced block (optional):
   benchmark         str    — benchmark symbol, e.g. "QQQ"
   timezone          str    — e.g. "America/New_York"
@@ -49,8 +39,6 @@ advanced block (optional):
   min_daily_volume  int    — minimum avg daily volume filter
   slope_lookback    int    — bars to measure MA slope
   bounce_range_ratio float — min close position within day range
-  range_mult        float  — intraday range multiplier (oversold)
-  stop_buffer       float  — stop loss buffer (oversold)
   allow_yahoo_ingest bool  — allow auto-download of data
 
   execution:
@@ -78,8 +66,6 @@ from typing import Any
 _FREQUENCY_MAP = {
     "daily":  (1440, "1d"),
     "hourly": (60,   "1h"),
-    "5min":   (5,    "5m"),
-    "1min":   (1,    "1m"),
 }
 
 _MA_NAME_MAP = {
@@ -112,20 +98,6 @@ _PARAM_KEY_MAP: dict[str, dict[str, str]] = {
         "max_positions":    "max_positions",
         "rebalance":        "rebalance_rule",
         "rank_by":          "rank_metric",
-    },
-    "oversold_bounce_long_only": {
-        "ema_period":          "ema_period",
-        "sma_period":          "sma_period",
-        "ema_extension":       "ext_10",
-        "sma_extension":       "ext_20",
-        "min_down_days":       "min_down_days",
-        "max_hold_days":       "max_hold_days",
-        "entry_after_hour":    "entry_after_hour",
-        "entry_after_minute":  "entry_after_minute",
-        "min_price":           "min_price",
-        "min_daily_volume":    "min_avg_daily_volume",
-        "range_mult":          "range_mult",
-        "stop_buffer":         "stop_buffer",
     },
     "rsi_mean_reversion_long_only": {
         "rsi_period":           "rsi_period",
@@ -227,24 +199,6 @@ def normalize_schema(schema: dict[str, Any]) -> dict[str, Any]:
         if "long_ma" in strategy:
             params["long_window"] = int(strategy["long_ma"])
 
-    elif template == "oversold_bounce_long_only":
-        if "ema_period" in strategy:
-            params["ema_period"] = int(strategy["ema_period"])
-        if "sma_period" in strategy:
-            params["sma_period"] = int(strategy["sma_period"])
-        if "ema_extension" in strategy:
-            params["ext_10"] = float(strategy["ema_extension"])
-        if "sma_extension" in strategy:
-            params["ext_20"] = float(strategy["sma_extension"])
-        if "min_down_days" in strategy:
-            params["min_down_days"] = int(strategy["min_down_days"])
-        if "max_hold_days" in strategy:
-            params["max_hold_days"] = int(strategy["max_hold_days"])
-        if "entry_after_hour" in strategy:
-            params["entry_after_hour"] = int(strategy["entry_after_hour"])
-        if "entry_after_minute" in strategy:
-            params["entry_after_minute"] = int(strategy["entry_after_minute"])
-
     elif template == "rsi_mean_reversion_long_only":
         for key in ("rsi_period", "trend_filter_period", "max_hold_days"):
             if key in strategy:
@@ -254,7 +208,7 @@ def normalize_schema(schema: dict[str, Any]) -> dict[str, Any]:
                 params[key] = float(strategy[key])
 
     # advanced → params
-    for key in ("min_price", "slope_lookback", "bounce_range_ratio", "range_mult", "stop_buffer"):
+    for key in ("min_price", "slope_lookback", "bounce_range_ratio"):
         if key in advanced:
             params[key] = advanced[key]
     if "min_daily_volume" in advanced:

@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backtesting</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2a2d3a;
+      --text:      #e2e8f0;
+      --muted:     #8892a4;
+      --accent:    #3b82f6;
+      --accent-h:  #2563eb;
+      --success:   #22c55e;
+      --danger:    #ef4444;
+      --radius:    8px;
+      --font:      system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    header .logo {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    header .logo span {
+      color: var(--accent);
+    }
+
+    header .tag {
+      font-size: 11px;
+      background: #1e3a5f;
+      color: #93c5fd;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+
+    /* ── Main layout ──────────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 0;
+      overflow: hidden;
+      height: calc(100vh - 56px);
+    }
+
+    /* ── Left panel — form ────────────────────────────────────── */
+    .panel-form {
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .field input,
+    .field select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 13px;
+      font-family: var(--font);
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: var(--accent);
+    }
+
+    .field input::placeholder {
+      color: var(--muted);
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* slider */
+    .slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .slider-wrap input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: pointer;
+    }
+
+    .slider-val {
+      min-width: 32px;
+      text-align: right;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* divider */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* strategy params placeholder */
+    #strategy-params {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* run button */
+    .btn-run {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 11px 0;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.15s;
+      letter-spacing: 0.2px;
+    }
+
+    .btn-run:hover { background: var(--accent-h); }
+    .btn-run:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+    /* ── Right panel — results ────────────────────────────────── */
+    .panel-results {
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .results-placeholder {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--muted);
+    }
+
+    .results-placeholder .icon {
+      font-size: 40px;
+      opacity: 0.3;
+    }
+
+    .results-placeholder p {
+      font-size: 14px;
+    }
+
+    .results-placeholder .hint {
+      font-size: 12px;
+      opacity: 0.6;
+    }
+
+    /* metric cards row */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+
+    .metric-card .label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .metric-card .value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .metric-card .value.pos { color: var(--success); }
+    .metric-card .value.neg { color: var(--danger); }
+
+    /* chart placeholder */
+    .chart-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      min-height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* trade summary table */
+    .table-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .table-box .table-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 24px;
+    }
+
+    .kv-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .kv-row .k { color: var(--muted); }
+    .kv-row .v { font-weight: 500; }
+
+    /* run info bar */
+    .run-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .run-info .chip {
+      display: flex;
+      gap: 5px;
+    }
+    .run-info .chip .chip-label { opacity: 0.6; }
+    .run-info .chip .chip-val   { color: var(--text); font-weight: 500; }
+
+    /* neutral metric value colour */
+    .metric-card .value.neutral { color: var(--text); }
+    .metric-card .value.warn    { color: #f59e0b; }
+
+    /* portfolio value sub-line */
+    .metric-card .sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">Back<span>test</span></div>
+    <div class="tag">Beta</div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────────────── -->
+  <main>
+
+    <!-- Left: form -->
+    <aside class="panel-form">
+
+      <!-- Strategy -->
+      <div>
+        <div class="section-title">Strategy</div>
+        <div class="field">
+          <label for="sel-template">Template</label>
+          <select id="sel-template">
+            <option value="">Loading strategies…</option>
+          </select>
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <!-- Universe -->
+      <div>
+        <div class="section-title">Universe</div>
+        <div class="field">
+          <label for="inp-symbols">Symbol(s)</label>
+          <input id="inp-symbols" type="text" placeholder="AAPL" />
+        </div>
+        <div class="field" style="margin-top:10px">
+          <label for="inp-benchmark">Benchmark</label>
+          <input id="inp-benchmark" type="text" placeholder="SPY" />
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <!-- Period -->
+      <div>
+        <div class="section-title">Period</div>
+        <div class="field-row">
+          <div class="field">
+            <label for="inp-start">Start date</label>
+            <input id="inp-start" type="date" value="2018-01-02" />
+          </div>
+          <div class="field">
+            <label for="inp-end">End date</label>
+            <input id="inp-end" type="date" value="2026-03-10" />
+          </div>
+        </div>
+        <div class="field" style="margin-top:10px">
+          <label for="inp-cash">Initial cash ($)</label>
+          <input id="inp-cash" type="number" value="100000" min="1000" step="1000" />
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <!-- Strategy params (dynamic — populated by JS in Phase 9) -->
+      <div>
+        <div class="section-title">Strategy Parameters</div>
+        <div id="strategy-params">
+          <!-- Populated dynamically by JS from GET /templates -->
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <button class="btn-run" id="btn-run">Run Backtest</button>
+
+    </aside>
+
+    <!-- Right: results -->
+    <section class="panel-results" id="panel-results">
+
+      <div class="results-placeholder" id="results-placeholder">
+        <div class="icon">📈</div>
+        <p>No results yet</p>
+        <p class="hint">Configure your strategy and click Run Backtest</p>
+      </div>
+
+      <!-- Run info bar -->
+      <div class="run-info" id="run-info" style="display:none"></div>
+
+      <!-- Row 1: primary metrics -->
+      <div class="metrics-row" id="metrics-row" style="display:none">
+        <div class="metric-card">
+          <div class="label">Total Return</div>
+          <div class="value" id="m-return">—</div>
+          <div class="sub"  id="m-endval"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Sharpe Ratio</div>
+          <div class="value" id="m-sharpe">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Max Drawdown</div>
+          <div class="value" id="m-drawdown">—</div>
+        </div>
+      </div>
+
+      <!-- Row 2: trade stats -->
+      <div class="metrics-row" id="metrics-row-2" style="display:none">
+        <div class="metric-card">
+          <div class="label">Win Rate</div>
+          <div class="value" id="m-winrate">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Total Trades</div>
+          <div class="value neutral" id="m-trades">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Avg Hold Days</div>
+          <div class="value neutral" id="m-hold">—</div>
+        </div>
+      </div>
+
+      <!-- Row 3: risk metrics -->
+      <div class="metrics-row" id="metrics-row-3" style="display:none">
+        <div class="metric-card">
+          <div class="label">Alpha</div>
+          <div class="value" id="m-alpha">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Beta</div>
+          <div class="value neutral" id="m-beta">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Volatility (ann.)</div>
+          <div class="value neutral" id="m-vol">—</div>
+        </div>
+      </div>
+
+      <!-- Equity curve chart -->
+      <div class="chart-box" id="chart-box" style="display:none; align-items:stretch; padding:16px;">
+        <canvas id="equity-chart"></canvas>
+      </div>
+
+      <!-- Trade detail table -->
+      <div class="table-box" id="trade-box" style="display:none">
+        <div class="table-title">Trade Detail</div>
+        <div class="kv-grid" id="trade-grid"></div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script>
+    // ── Template state ─────────────────────────────────────────
+    let _templates = [];
+
+    // ── Wire slider value display (called after each render) ───
+    function wireSliders() {
+      document.querySelectorAll('#strategy-params .slider-wrap input[type=range]').forEach(slider => {
+        const display = slider.nextElementSibling;
+        // set initial display, then keep live
+        display.textContent = slider.value;
+        slider.addEventListener('input', () => display.textContent = slider.value);
+      });
+    }
+
+    // ── Render strategy params for a given template object ─────
+    function renderParams(template) {
+      const container = document.getElementById('strategy-params');
+      if (!template || !template.params) { container.innerHTML = ''; return; }
+
+      const html = Object.entries(template.params).map(([key, meta]) => {
+        if (meta.type === 'select') {
+          const opts = meta.options.map(o =>
+            `<option value="${o}"${o === meta.default ? ' selected' : ''}>${o}</option>`
+          ).join('');
+          return `
+            <div class="field">
+              <label>${meta.label}</label>
+              <select data-param="${key}" data-type="string">${opts}</select>
+            </div>`;
+        }
+        // int or float → slider
+        return `
+          <div class="field">
+            <label>${meta.label}</label>
+            <div class="slider-wrap">
+              <input type="range"
+                min="${meta.min}" max="${meta.max}" value="${meta.default}"
+                data-param="${key}" data-type="${meta.type}" />
+              <span class="slider-val">${meta.default}</span>
+            </div>
+          </div>`;
+      }).join('');
+
+      container.innerHTML = html;
+      wireSliders();
+
+      // Update symbol placeholder based on multi-symbol support
+      const symbolInput = document.getElementById('inp-symbols');
+      symbolInput.placeholder = template.multi_symbol ? 'QQQ, SPY, IWM' : 'AAPL';
+    }
+
+    // ── Load templates from API on page load ───────────────────
+    async function loadTemplates() {
+      try {
+        const res = await fetch('/templates');
+        _templates = await res.json();
+
+        const sel = document.getElementById('sel-template');
+        sel.innerHTML = _templates.map(t =>
+          `<option value="${t.id}">${t.name}</option>`
+        ).join('');
+
+        // render params for the first template immediately
+        if (_templates.length > 0) renderParams(_templates[0]);
+      } catch (e) {
+        document.getElementById('sel-template').innerHTML =
+          '<option value="">Failed to load strategies</option>';
+      }
+    }
+
+    // ── Re-render params when strategy changes ─────────────────
+    document.getElementById('sel-template').addEventListener('change', e => {
+      const template = _templates.find(t => t.id === e.target.value);
+      renderParams(template);
+    });
+
+    // ── Read strategy params from data-param inputs ────────────
+    function readStrategyParams() {
+      const params = {};
+      document.querySelectorAll('#strategy-params [data-param]').forEach(el => {
+        const key   = el.dataset.param;
+        const type  = el.dataset.type || 'string';
+        const raw   = el.value;
+        params[key] = (type === 'int')   ? parseInt(raw, 10)
+                    : (type === 'float') ? parseFloat(raw)
+                    :                      raw;
+      });
+      return params;
+    }
+
+    // ── UI helpers ─────────────────────────────────────────────
+    function showStatus(msg) {
+      const ph = document.getElementById('results-placeholder');
+      ph.style.display = 'flex';
+      ph.innerHTML = `<div class="icon">&#9203;</div><p>${msg}</p>`;
+      hideResultPanels();
+    }
+
+    function showError(msg) {
+      const ph = document.getElementById('results-placeholder');
+      ph.style.display = 'flex';
+      ph.innerHTML = `<div class="icon">&#10060;</div><p style="color:var(--danger)">${msg}</p>`;
+      hideResultPanels();
+    }
+
+    function hideResultPanels() {
+      ['run-info','metrics-row','metrics-row-2','metrics-row-3',
+       'chart-box','trade-box'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+    }
+
+    // ── Colour helpers ─────────────────────────────────────────
+    function signClass(strVal) {
+      if (!strVal) return 'neutral';
+      return String(strVal).startsWith('-') ? 'neg' : 'pos';
+    }
+
+    function sharpeClass(v) {
+      if (v == null) return 'neutral';
+      return v >= 1 ? 'pos' : v >= 0.5 ? 'warn' : 'neg';
+    }
+
+    function fmtNum(v, decimals = 2) {
+      return (v == null) ? '—' : Number(v).toFixed(decimals);
+    }
+
+    function fmtCurrency(v) {
+      if (v == null) return '';
+      return '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+
+    function setText(id, text, cls) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = text || '—';
+      if (cls) { el.className = 'value ' + cls; }
+    }
+
+    // ── Formatted results ──────────────────────────────────────
+    function showFormattedResult(result) {
+      document.getElementById('results-placeholder').style.display = 'none';
+
+      const m  = result.metrics        || {};
+      const ts = result.trade_summary  || {};
+      const bw = result.backtest_window || {};
+
+      // run info bar
+      const templateId   = document.getElementById('sel-template').value;
+      const templateName = (_templates.find(t => t.id === templateId) || {}).name || templateId;
+      const symbols      = document.getElementById('inp-symbols').value.trim().toUpperCase();
+      const ri = document.getElementById('run-info');
+      ri.innerHTML = [
+        `<span class="chip"><span class="chip-label">Symbol</span><span class="chip-val">${symbols}</span></span>`,
+        `<span class="chip"><span class="chip-label">Period</span><span class="chip-val">${bw.start} &rarr; ${bw.end}</span></span>`,
+        `<span class="chip"><span class="chip-label">Strategy</span><span class="chip-val">${templateName}</span></span>`,
+        `<span class="chip"><span class="chip-label">Mode</span><span class="chip-val">${result.mode || '—'}</span></span>`,
+      ].join('');
+      ri.style.display = 'flex';
+
+      // row 1 — primary metrics
+      setText('m-return',   m.total_return  || '—', signClass(m.total_return));
+      setText('m-sharpe',   fmtNum(m.sharpe),        sharpeClass(m.sharpe));
+      setText('m-drawdown', m.max_drawdown  || '—', 'neg');
+      document.getElementById('m-endval').textContent =
+        m.ending_portfolio_value ? fmtCurrency(m.ending_portfolio_value) : '';
+      document.getElementById('metrics-row').style.display = 'grid';
+
+      // row 2 — trade stats
+      const wr = parseFloat(ts.win_rate);
+      setText('m-winrate', ts.win_rate  || '—', isNaN(wr) ? 'neutral' : wr >= 50 ? 'pos' : 'neg');
+      setText('m-trades',  ts.trade_count != null ? String(ts.trade_count) : '—');
+      setText('m-hold',    ts.avg_hold_days != null ? fmtNum(ts.avg_hold_days, 1) + ' days' : '—');
+      document.getElementById('metrics-row-2').style.display = 'grid';
+
+      // row 3 — risk
+      setText('m-alpha', m.alpha || '—', signClass(m.alpha));
+      setText('m-beta',  m.beta  != null ? fmtNum(m.beta, 2) : '—');
+      setText('m-vol',   m.algo_volatility || '—');
+      document.getElementById('metrics-row-3').style.display = 'grid';
+
+      // equity curve chart
+      renderChart(result.equity_curve, m.ending_portfolio_value);
+
+      // trade detail table
+      const rows = [
+        ['Avg Trade Return',  ts.avg_trade_return],
+        ['Avg Win',           ts.avg_win_return],
+        ['Avg Loss',          ts.avg_loss_return],
+        ['Expectancy',        ts.expectancy_return],
+        ['Best Trade',        ts.best_trade_return],
+        ['Worst Trade',       ts.worst_trade_return],
+        ['Realized PnL',      ts.total_realized_pnl != null ? fmtCurrency(ts.total_realized_pnl) : null],
+      ];
+      document.getElementById('trade-grid').innerHTML = rows
+        .filter(([, v]) => v != null)
+        .map(([k, v]) => `<div class="kv-row"><span class="k">${k}</span><span class="v">${v}</span></div>`)
+        .join('');
+      document.getElementById('trade-box').style.display = 'block';
+    }
+
+    function setBtn(running) {
+      const btn = document.getElementById('btn-run');
+      btn.disabled = running;
+      btn.textContent = running ? 'Running…' : 'Run Backtest';
+    }
+
+    // ── Poll job until terminal state ──────────────────────────
+    function pollJob(jobId) {
+      const ivl = setInterval(async () => {
+        try {
+          const res = await fetch(`/jobs/${jobId}`);
+          const job = await res.json();
+
+          if (job.status === 'pending' || job.status === 'queued') {
+            showStatus(`Queued — waiting for previous job to finish… (${jobId})`);
+            return;
+          }
+          if (job.status === 'running') {
+            showStatus(`Running backtest… (${jobId})`);
+            return;
+          }
+
+          clearInterval(ivl);
+          setBtn(false);
+
+          if (job.status === 'done') {
+            showFormattedResult(job.result);
+          } else {
+            showError(job.detail || 'Unknown error');
+          }
+        } catch (e) {
+          clearInterval(ivl);
+          setBtn(false);
+          showError(e.message);
+        }
+      }, 2000);
+    }
+
+    // ── Submit backtest ────────────────────────────────────────
+    async function runBacktest() {
+      const symbolRaw = document.getElementById('inp-symbols').value.trim();
+      if (!symbolRaw) { showError('Please enter at least one symbol.'); return; }
+
+      const symbols   = symbolRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      const benchmark = document.getElementById('inp-benchmark').value.trim().toUpperCase() || undefined;
+      const template  = document.getElementById('sel-template').value || 'rsi_mean_reversion_long_only';
+      const start     = document.getElementById('inp-start').value;
+      const end       = document.getElementById('inp-end').value;
+      const cash      = Number(document.getElementById('inp-cash').value);
+
+      if (!start || !end) { showError('Please set start and end dates.'); return; }
+
+      const body = {
+        template,
+        symbols,
+        start,
+        end,
+        initial_cash: cash,
+        strategy: readStrategyParams(),
+        advanced: benchmark ? { benchmark } : {},
+        ingest_if_missing: true,
+      };
+
+      setBtn(true);
+      showStatus('Submitting job…');
+
+      try {
+        const res = await fetch('/backtest', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setBtn(false);
+          const detail = Array.isArray(data.detail)
+            ? data.detail.map(e => e.msg).join(', ')
+            : (data.detail || 'Request failed');
+          showError(detail);
+          return;
+        }
+
+        pollJob(data.job_id);
+      } catch (e) {
+        setBtn(false);
+        showError(e.message);
+      }
+    }
+
+    document.getElementById('btn-run').addEventListener('click', runBacktest);
+
+    // ── Equity curve chart ─────────────────────────────────────
+    let _chart = null;
+
+    function renderChart(equityCurve, initialCash) {
+      const box = document.getElementById('chart-box');
+      if (!equityCurve || equityCurve.length === 0) {
+        box.style.display = 'none';
+        return;
+      }
+
+      // Thin the series to ~300 points max so the chart stays fast
+      const step  = Math.max(1, Math.floor(equityCurve.length / 300));
+      const thin  = equityCurve.filter((_, i) => i % step === 0 || i === equityCurve.length - 1);
+
+      const labels = thin.map(p => p.date);
+      const values = thin.map(p => p.value);
+
+      // Colour the line green if ending above start, red if below
+      const lineColor = values[values.length - 1] >= values[0] ? '#22c55e' : '#ef4444';
+
+      if (_chart) { _chart.destroy(); _chart = null; }
+
+      const ctx = document.getElementById('equity-chart').getContext('2d');
+      _chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Portfolio Value',
+            data: values,
+            borderColor: lineColor,
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: true,
+            backgroundColor: lineColor + '18',
+            tension: 0.1,
+          }],
+        },
+        options: {
+          responsive: true,
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => '$' + Number(ctx.parsed.y).toLocaleString('en-US', { maximumFractionDigits: 0 }),
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: '#8892a4',
+                maxTicksLimit: 8,
+                maxRotation: 0,
+              },
+              grid: { color: '#2a2d3a' },
+            },
+            y: {
+              ticks: {
+                color: '#8892a4',
+                callback: v => '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }),
+              },
+              grid: { color: '#2a2d3a' },
+            },
+          },
+        },
+      });
+
+      box.style.display = 'block';
+    }
+
+    // ── Boot ───────────────────────────────────────────────────
+    loadTemplates();
+  </script>
+</body>
+</html>

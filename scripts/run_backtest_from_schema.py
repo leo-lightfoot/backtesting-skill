@@ -434,7 +434,7 @@ def build_params(
 
     symbols = get_schema_symbols(schema)
     symbol = str(schema.get("symbol", symbols[0]))
-    frequency_minutes = int(schema.get("frequency_minutes", 5))
+    frequency_minutes = int(schema.get("frequency_minutes", 1440))
     market_tz = schema.get("timezone", "America/New_York")
 
     strategy = REGISTRY[template]
@@ -467,6 +467,23 @@ def build_params(
             )
 
     return defaults
+
+
+def extract_equity_curve(result) -> list[dict]:
+    """Return [{date, value}] portfolio value series for the equity curve chart."""
+    perf = getattr(result, "perf", None)
+    if perf is None or len(perf) == 0:
+        return []
+    try:
+        rows = []
+        for ts, row in perf.iterrows():
+            pv = row.get("portfolio_value")
+            if pv is None or (isinstance(pv, float) and math.isnan(pv)):
+                continue
+            rows.append({"date": str(ts)[:10], "value": round(float(pv), 2)})
+        return rows
+    except Exception:
+        return []
 
 
 def extract_metrics(result, initial_cash: float) -> dict[str, float | None]:
@@ -1114,7 +1131,7 @@ def build_backtest_window(schema: dict[str, Any]) -> dict[str, Any]:
         "start": schema.get("start"),
         "end": schema.get("end"),
         "timezone": schema.get("timezone", "America/New_York"),
-        "frequency_minutes": schema.get("frequency_minutes", 5),
+        "frequency_minutes": schema.get("frequency_minutes", 1440),
     }
 
 
@@ -1171,6 +1188,31 @@ def _wrap_yfinance_download(download_func):
     return _wrapped
 
 
+async def _dispose_asset_service(asset_service: Any) -> None:
+    """Dispose SQLAlchemy engine pools on an AssetService.
+
+    On Windows, aiosqlite connection pools keep assets.sqlite file-locked even
+    after the owning coroutine returns.  Explicitly disposing the engines
+    releases the handles before the next caller opens the same file.
+    """
+    import gc
+    for repo_attr in ("_asset_repository", "_adjustments_repository"):
+        try:
+            repo = getattr(asset_service, repo_attr, None)
+            if repo is None:
+                continue
+            sm = getattr(repo, "session_maker", None)
+            if sm is None:
+                continue
+            engine = getattr(sm, "kw", {}).get("bind")
+            if engine and hasattr(engine, "dispose"):
+                await engine.dispose()
+        except Exception:
+            pass
+    del asset_service
+    gc.collect()
+
+
 async def maybe_ingest_if_needed(
     schema: dict[str, Any], data_dir: str, ingest_if_missing: bool
 ) -> None:
@@ -1186,8 +1228,27 @@ async def maybe_ingest_if_needed(
     end = parse_date(schema["end"], tz_name) + dt.timedelta(days=1)
 
     symbols = data_cfg.get("symbols") or [schema["symbol"]]
-    freq_min = int(schema.get("frequency_minutes", 5))
+    freq_min = int(schema.get("frequency_minutes", 1440))
     bundle_name = schema["bundle"]
+
+    # Skip ingestion if the newest bundle version already covers the requested
+    # date window.  This avoids re-writing assets.sqlite on every run and
+    # prevents Windows file-lock conflicts (WinError 32).
+    registry_dir = Path(data_dir, "bundle_registry")
+    registry_files = sorted(registry_dir.glob(f"{bundle_name}_*.json")) if registry_dir.is_dir() else []
+    if registry_files:
+        try:
+            meta = json.loads(registry_files[-1].read_text(encoding="utf-8"))
+            bundle_start = dt.datetime.fromisoformat(
+                meta["start_date"].replace("Z", "+00:00")
+            ).astimezone(start.tzinfo)
+            bundle_end = dt.datetime.fromisoformat(
+                meta["end_date"].replace("Z", "+00:00")
+            ).astimezone(end.tzinfo)
+            if bundle_start <= start and bundle_end >= end:
+                return  # bundle already covers the full requested window
+        except Exception:
+            pass  # malformed metadata — fall through and re-ingest
 
     from ziplime.core.ingest_data import (
         get_asset_service,
@@ -1228,6 +1289,11 @@ async def maybe_ingest_if_needed(
         bundle_storage_path=data_dir,
     )
 
+    # Dispose all SQLAlchemy engine connection pools held by the asset_service.
+    # On Windows, pool connections keep assets.sqlite locked even after the
+    # coroutine returns, causing WinError 32 when run_once opens it next.
+    await _dispose_asset_service(asset_service)
+
 
 async def load_market_bundle(schema: dict[str, Any], data_dir: str):
     from ziplime.data.services.bundle_service import BundleService
@@ -1246,7 +1312,7 @@ async def load_market_bundle(schema: dict[str, Any], data_dir: str):
     return await bundle_service.load_bundle(
         bundle_name=schema["bundle"],
         bundle_version=None,
-        frequency=dt.timedelta(minutes=int(schema.get("frequency_minutes", 5))),
+        frequency=dt.timedelta(minutes=int(schema.get("frequency_minutes", 1440))),
         start_date=start,
         end_date=end,
         symbols=symbols,
@@ -1291,6 +1357,7 @@ async def run_once(
         f.write(algo_source)
         algo_file = f.name
 
+    _owns_asset_service = asset_service is None
     if asset_service is None:
         from ziplime.core.ingest_data import get_asset_service
 
@@ -1301,7 +1368,7 @@ async def run_once(
         market_bundle = await load_market_bundle(schema, data_dir=data_dir)
 
     initial_cash = float(schema.get("initial_cash", 100_000.0))
-    emission_rate = dt.timedelta(minutes=int(schema.get("frequency_minutes", 5)))
+    emission_rate = dt.timedelta(minutes=int(schema.get("frequency_minutes", 1440)))
 
     calendar = get_calendar("NYSE")
     clock = SimulationClock(
@@ -1340,38 +1407,44 @@ async def run_once(
         ),
     )
 
-    with (
-        contextlib.redirect_stdout(io.StringIO()),
-        contextlib.redirect_stderr(io.StringIO()),
-    ):
-        result = await run_simulation(
-            asset_service=asset_service,
-            start_date=start,
-            end_date=end,
-            trading_calendar="NYSE",
-            algorithm_file=algo_file,
-            total_cash=initial_cash,
-            market_data_source=market_bundle,
-            custom_data_sources=[],
-            config_file=None,
-            emission_rate=emission_rate,
-            benchmark_asset_symbol=schema.get("benchmark_symbol"),
-            benchmark_returns=None,
-            exchange=exchange,
-            equity_commission=equity_commission,
-            future_commission=future_commission,
-            clock=clock,
-            stop_on_error=False,
-            max_leverage=float(exec_cfg["max_leverage"]),
-            same_bar_execution=bool(exec_cfg["same_bar_execution"]),
-            price_used_in_order_execution=cast(
-                Any, str(exec_cfg["price_used_in_order_execution"])
-            ),
-        )
+    try:
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            result = await run_simulation(
+                asset_service=asset_service,
+                start_date=start,
+                end_date=end,
+                trading_calendar="NYSE",
+                algorithm_file=algo_file,
+                total_cash=initial_cash,
+                market_data_source=market_bundle,
+                custom_data_sources=[],
+                config_file=None,
+                emission_rate=emission_rate,
+                benchmark_asset_symbol=schema.get("benchmark_symbol"),
+                benchmark_returns=None,
+                exchange=exchange,
+                equity_commission=equity_commission,
+                future_commission=future_commission,
+                clock=clock,
+                stop_on_error=False,
+                max_leverage=float(exec_cfg["max_leverage"]),
+                same_bar_execution=bool(exec_cfg["same_bar_execution"]),
+                price_used_in_order_execution=cast(
+                    Any, str(exec_cfg["price_used_in_order_execution"])
+                ),
+            )
+    except Exception:
+        if _owns_asset_service:
+            await _dispose_asset_service(asset_service)
+        raise
 
     metrics = extract_metrics(result, initial_cash=initial_cash)
     performance_metrics = extract_performance_metrics(result, metrics)
     trade_summary = extract_trade_summary(result)
+    equity_curve = extract_equity_curve(result)
     capacity_diagnostics = build_capacity_diagnostics_from_perf(
         perf=getattr(result, "perf", None), params=final_params
     )
@@ -1382,7 +1455,7 @@ async def run_once(
         metrics=metrics,
     )
     live_interface = build_live_interface(schema)
-    return {
+    out = {
         "params": final_params,
         "window": {
             "start": start_str,
@@ -1391,12 +1464,18 @@ async def run_once(
         "metrics": metrics,
         "performance_metrics": performance_metrics,
         "trade_summary": trade_summary,
+        "equity_curve": equity_curve,
         "capacity_diagnostics": capacity_diagnostics,
         "risk_attribution": risk_attribution,
         "practical_assessment": practical_assessment,
         "live_interface": live_interface,
         "errors": result.errors,
     }
+    # Dispose asset_service connections when we own it so that Windows
+    # releases the assets.sqlite file handle before the next job starts.
+    if _owns_asset_service:
+        await _dispose_asset_service(asset_service)
+    return out
 
 
 async def run_grid(
@@ -1533,6 +1612,8 @@ async def run_grid(
     )
     live_interface = build_live_interface(schema)
 
+    await _dispose_asset_service(shared_asset_service)
+
     return {
         "rank_by": rank_by,
         "total_trials": len(rows_sorted),
@@ -1558,16 +1639,117 @@ def _emit(payload: dict, output_path: str | None) -> None:
         print(text)
 
 
+async def run_backtest(
+    schema: dict,
+    data_dir: str | None = None,
+    ingest_if_missing: bool = False,
+) -> dict:
+    """Run a full backtest from a schema dict and return the result as a dict.
+
+    This is the programmatic entry point used by the API and tests.
+    The CLI (async_main) is a thin wrapper around this function.
+
+    Args:
+        schema: Backtest schema in either two-tier or internal format.
+                normalize_schema() is called automatically.
+        data_dir: Path to ziplime data root. Defaults to ~/.ziplime/data.
+        ingest_if_missing: Trigger Yahoo ingestion if the bundle is absent
+                           and allow_yahoo_ingest is set in the schema.
+
+    Returns:
+        Result dict identical to what the CLI prints as JSON.
+    """
+    schema = normalize_schema(schema)
+    validation = resolve_validation_split(schema)
+    data_interface = build_data_interface(schema)
+    backtest_window = build_backtest_window(schema)
+
+    data_dir = data_dir or str(Path(Path.home(), ".ziplime", "data"))
+
+    if data_interface.get("status") != "active":
+        raise ValueError(
+            f"data.source '{data_interface.get('source')}' is reserved. "
+            "Use --validate-only for interface checks or switch to data.source='bundle'."
+        )
+
+    await maybe_ingest_if_needed(schema, data_dir=data_dir, ingest_if_missing=ingest_if_missing)
+
+    grid_enabled = bool(schema.get("grid_search", {}).get("enabled", False))
+    if grid_enabled:
+        res = await run_grid(schema, data_dir=data_dir, validation=validation)
+        out = format_percentage_output(
+            {"mode": "grid", "backtest_window": backtest_window, **res}
+        )
+        out["data_interface"] = data_interface
+    else:
+        if validation is None:
+            res = await run_once(schema, data_dir=data_dir)
+            out = format_percentage_output(
+                {"mode": "single", "backtest_window": backtest_window, **res}
+            )
+            out["data_interface"] = data_interface
+        else:
+            from ziplime.core.ingest_data import get_asset_service
+
+            shared_asset_service = get_asset_service(
+                db_path=str(Path(data_dir, "assets.sqlite")), clear_asset_db=False
+            )
+            shared_market_bundle = await load_market_bundle(schema, data_dir=data_dir)
+
+            train_res = await run_once(
+                schema,
+                data_dir=data_dir,
+                window=validation["train"],
+                asset_service=shared_asset_service,
+                market_bundle=shared_market_bundle,
+            )
+            test_res = await run_once(
+                schema,
+                data_dir=data_dir,
+                window=validation["test"],
+                asset_service=shared_asset_service,
+                market_bundle=shared_market_bundle,
+            )
+            await _dispose_asset_service(shared_asset_service)
+            out = format_percentage_output(
+                {
+                    "mode": "single",
+                    "backtest_window": backtest_window,
+                    "validation": validation,
+                    "data_interface": data_interface,
+                    "params": test_res.get("params"),
+                    "window": {
+                        "train": train_res.get("window"),
+                        "test": test_res.get("window"),
+                    },
+                    "train": train_res,
+                    "test": test_res,
+                    "metrics": test_res.get("metrics"),
+                    "performance_metrics": test_res.get("performance_metrics"),
+                    "trade_summary": test_res.get("trade_summary"),
+                    "capacity_diagnostics": test_res.get("capacity_diagnostics"),
+                    "risk_attribution": test_res.get("risk_attribution"),
+                    "practical_assessment": test_res.get("practical_assessment"),
+                    "live_interface": test_res.get("live_interface"),
+                    "errors": list(train_res.get("errors", []))
+                    + list(test_res.get("errors", [])),
+                }
+            )
+    return out
+
+
 async def async_main(args):
     schema_path = Path(args.schema).resolve()
-    schema = normalize_schema(json.loads(schema_path.read_text(encoding="utf-8")))
-    validation = resolve_validation_split(schema)
-    live_interface = build_live_interface(schema)
-    data_interface = build_data_interface(schema)
+    raw_schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
     data_dir = args.data_dir or str(Path(Path.home(), ".ziplime", "data"))
 
     if args.validate_only:
+        schema = normalize_schema(raw_schema)
+        validation = resolve_validation_split(schema)
+        live_interface = build_live_interface(schema)
+        data_interface = build_data_interface(schema)
+
         base_params = build_params(schema)
         source = make_algorithm_source(schema["template"], base_params)
         compile(source, "generated_algorithm.py", "exec")
@@ -1600,79 +1782,12 @@ async def async_main(args):
         )
         return
 
-    if data_interface.get("status") != "active":
-        raise ValueError(
-            f"data.source '{data_interface.get('source')}' is reserved. Use --validate-only for interface checks or switch to data.source='bundle'."
-        )
-
-    await maybe_ingest_if_needed(
-        schema, data_dir=data_dir, ingest_if_missing=args.ingest_if_missing
+    out = await run_backtest(
+        raw_schema,
+        data_dir=data_dir,
+        ingest_if_missing=args.ingest_if_missing,
     )
-
-    grid_enabled = bool(schema.get("grid_search", {}).get("enabled", False))
-    backtest_window = build_backtest_window(schema)
-    if grid_enabled:
-        res = await run_grid(schema, data_dir=data_dir, validation=validation)
-        out = format_percentage_output(
-            {"mode": "grid", "backtest_window": backtest_window, **res}
-        )
-        out["data_interface"] = data_interface
-        _emit(out, args.output)
-    else:
-        if validation is None:
-            res = await run_once(schema, data_dir=data_dir)
-            out = format_percentage_output(
-                {"mode": "single", "backtest_window": backtest_window, **res}
-            )
-        else:
-            from ziplime.core.ingest_data import get_asset_service
-
-            shared_asset_service = get_asset_service(
-                db_path=str(Path(data_dir, "assets.sqlite")), clear_asset_db=False
-            )
-            shared_market_bundle = await load_market_bundle(schema, data_dir=data_dir)
-
-            train_res = await run_once(
-                schema,
-                data_dir=data_dir,
-                window=validation["train"],
-                asset_service=shared_asset_service,
-                market_bundle=shared_market_bundle,
-            )
-            test_res = await run_once(
-                schema,
-                data_dir=data_dir,
-                window=validation["test"],
-                asset_service=shared_asset_service,
-                market_bundle=shared_market_bundle,
-            )
-            out = format_percentage_output(
-                {
-                    "mode": "single",
-                    "backtest_window": backtest_window,
-                    "validation": validation,
-                    "data_interface": data_interface,
-                    "params": test_res.get("params"),
-                    "window": {
-                        "train": train_res.get("window"),
-                        "test": test_res.get("window"),
-                    },
-                    "train": train_res,
-                    "test": test_res,
-                    "metrics": test_res.get("metrics"),
-                    "performance_metrics": test_res.get("performance_metrics"),
-                    "trade_summary": test_res.get("trade_summary"),
-                    "capacity_diagnostics": test_res.get("capacity_diagnostics"),
-                    "risk_attribution": test_res.get("risk_attribution"),
-                    "practical_assessment": test_res.get("practical_assessment"),
-                    "live_interface": test_res.get("live_interface"),
-                    "errors": list(train_res.get("errors", []))
-                    + list(test_res.get("errors", [])),
-                }
-            )
-        if validation is None:
-            out["data_interface"] = data_interface
-        _emit(out, args.output)
+    _emit(out, args.output)
 
 
 def main():

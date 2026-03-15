@@ -4,29 +4,26 @@ Use this two-tier human-friendly format. The runner auto-translates it to its in
 
 ```json
 {
-  "template": "oversold_bounce_long_only",
-  "symbols": ["QQQ"],
-  "frequency": "5min",
-  "start": "2025-06-10",
-  "end": "2025-07-31",
+  "template": "rsi_mean_reversion_long_only",
+  "symbols": ["AAPL"],
+  "frequency": "daily",
+  "start": "2018-01-02",
+  "end": "2024-12-31",
   "initial_cash": 100000,
 
   "strategy": {
-    "ema_extension": -0.30,
-    "sma_extension": -0.40,
-    "min_down_days": 3,
-    "max_hold_days": 3,
-    "entry_after_hour": 10,
-    "entry_after_minute": 0
+    "rsi_period": 14,
+    "oversold_threshold": 30,
+    "exit_rsi": 60,
+    "trend_filter_period": 200,
+    "max_hold_days": 20
   },
 
   "advanced": {
-    "benchmark": "QQQ",
-    "allow_yahoo_ingest": false,
+    "benchmark": "AAPL",
+    "allow_yahoo_ingest": true,
     "min_price": 5.0,
     "min_daily_volume": 2000000,
-    "range_mult": 1.5,
-    "stop_buffer": 0.01,
 
     "execution": {
       "slippage_bps": 5.0,
@@ -34,20 +31,19 @@ Use this two-tier human-friendly format. The runner auto-translates it to its in
     },
 
     "grid_search": {
-      "enabled": true,
+      "enabled": false,
       "rank_by": "sharpe",
       "top_n": 5,
       "params": {
-        "ema_extension": [-0.2, -0.3, -0.4],
-        "min_down_days": [3, 4, 5],
-        "max_hold_days": [2, 3, 5]
+        "rsi_period": [10, 14, 20],
+        "oversold_threshold": [25, 30, 35]
       }
     },
 
     "validation_split": {
       "enabled": false,
       "method": "date",
-      "split_date": "2025-07-01",
+      "split_date": "2022-01-03",
       "gap_bars": 0,
       "rank_on": "test_sharpe"
     }
@@ -58,7 +54,7 @@ Use this two-tier human-friendly format. The runner auto-translates it to its in
 ## Required fields
 - `template`
 - `symbols` (list, e.g. `["QQQ"]`)
-- `frequency`: `"daily"` | `"hourly"` | `"5min"` | `"1min"`
+- `frequency`: `"daily"` | `"hourly"`
 - `start`, `end`
 
 ## Symbols and portfolio mode
@@ -67,7 +63,10 @@ Use this two-tier human-friendly format. The runner auto-translates it to its in
   - `sma_crossover_long_only`
   - `trend_dip_buy_long_only`
 - Current implementation uses equal weights across active long signals.
-- `oversold_bounce_long_only` remains single-symbol strategy logic.
+- `rsi_mean_reversion_long_only` is single-symbol only; only the first symbol is used.
+
+## Benchmark warning
+The `benchmark` symbol must be present in the ingested data bundle. Always set it to one of the symbols in your `symbols` list. Setting a benchmark not in the bundle will cause a runtime error.
 
 ## Data source interface
 - `data.source = "bundle"` is active at runtime.
@@ -97,34 +96,34 @@ Use this two-tier human-friendly format. The runner auto-translates it to its in
 - `rank_on`: defaults to `test_sharpe`; supports `test_<metric>` or `train_<metric>`
 
 **Filters and portfolio** (`advanced`):
-- `benchmark`: benchmark symbol (default: first symbol)
+- `benchmark`: benchmark symbol (default: first symbol) — **must be one of the ingested symbols**
 - `timezone`: market timezone (default `America/New_York`)
 - `max_positions`: max simultaneous positions
 - `rank_by`: asset ranking metric
 - `rebalance`: `daily|weekly|monthly`
 - `min_price`, `min_daily_volume`: entry filters
 - `slope_lookback`, `bounce_range_ratio`: trend-dip specific
-- `range_mult`, `stop_buffer`: oversold-bounce specific
 - `allow_yahoo_ingest`: auto-download data if bundle is missing
 
 ## Supported templates
-- `oversold_bounce_long_only`
+- `rsi_mean_reversion_long_only`
 - `sma_crossover_long_only`
 - `trend_dip_buy_long_only`
 
 ## Reference examples
-- `references/example_oversold_schema.json`
+- `references/example_rsi_schema.json`
+- `references/example_rsi_aapl_schema.json`
 - `references/example_sma_schema.json`
 - `references/example_trend_dip_single_schema.json`
 - `references/example_trend_dip_grid_schema.json`
 
 ## Strategy block parameters
 
-`oversold_bounce_long_only`:
-- `ema_extension`, `sma_extension` — extension thresholds (e.g. `-0.30`, `-0.40`)
-- `min_down_days`, `max_hold_days`
-- `entry_after_hour`, `entry_after_minute` — time gate for entries (24h clock)
-- advanced filters: `min_price`, `min_daily_volume`, `range_mult`, `stop_buffer`
+`rsi_mean_reversion_long_only`:
+- `rsi_period`, `oversold_threshold`, `exit_rsi`
+- `trend_filter_period` — SMA period for trend filter (price must be above to enter)
+- `max_hold_days` — maximum bars to hold before forced exit
+- advanced filters: `min_price`, `min_daily_volume`
 
 `sma_crossover_long_only`:
 - `short_ma`, `long_ma`
@@ -146,6 +145,7 @@ The runner prints JSON with:
 - `capacity_diagnostics`: avg_daily_trade_notional, avg_portfolio_value, avg_daily_turnover, annualized_turnover, adv_floor_dollar, participation_vs_adv_floor, participation_risk
 - `risk_attribution`: corr_with_benchmark, beta_up/down, capture_up/down, regime averages, rolling risk endpoints
 - `practical_assessment`: future_leakage, slippage_commission, overfitting_risk, capacity_liquidity
+- `equity_curve`: list of `{date, value}` portfolio value points for charting
 - `data_interface`: data source status and missing required fields for reserved interfaces
 - `live_interface`: reserved interface status and missing required fields when `live_data.enabled=true`
 - `validation`: split config and train/test windows when enabled

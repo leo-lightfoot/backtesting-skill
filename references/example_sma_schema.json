@@ -1,11 +1,11 @@
 {
-  "_description": "SMA Crossover strategy — multi-symbol (QQQ, SPY, IWM) on 5-minute bars. Holds the top 2 assets ranked by MA ratio, rebalances weekly.",
+  "_description": "SMA Crossover strategy — multi-symbol (QQQ, SPY, IWM) on daily bars. Holds the top 2 assets ranked by MA ratio, rebalances weekly.",
 
   "template": "sma_crossover_long_only",
   "symbols": ["QQQ", "SPY", "IWM"],
-  "frequency": "5min",
-  "start": "2025-06-10",
-  "end": "2025-07-31",
+  "frequency": "daily",
+  "start": "2018-01-02",
+  "end": "2024-12-31",
   "initial_cash": 100000,
 
   "strategy": {
@@ -35,7 +35,7 @@
     "validation_split": {
       "enabled": false,
       "method": "date",
-      "split_date": "2025-07-01",
+      "split_date": "2022-01-03",
       "rank_on": "test_sharpe"
     }
   }

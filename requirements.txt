@@ -4,3 +4,6 @@ pandas>=2.2.0,<3.0.0
 polars>=1.0.0
 yfinance>=0.2.65,<0.3.0
 ziplime @ git+https://github.com/Limex-com/ziplime.git
+fastapi>=0.115.0
+uvicorn>=0.30.0
+aiofiles>=23.0.0

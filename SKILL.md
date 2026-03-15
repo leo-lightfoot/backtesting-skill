@@ -11,7 +11,7 @@ Map the user strategy into schema fields, run the script, and report results in 
 
 ## Workflow
 1. Identify whether the user request maps to a supported template:
-   - `oversold_bounce_long_only`
+   - `rsi_mean_reversion_long_only`
    - `sma_crossover_long_only`
    - `trend_dip_buy_long_only`
 2. Build a schema JSON using `references/schema.md`.
@@ -46,7 +46,7 @@ Map the user strategy into schema fields, run the script, and report results in 
 - Keep grid search defaults small and fast; only run exhaustive grids when explicitly requested.
 
 ## Template Mapping Rules
-- If user asks for waterfall/panic-reversal mean reversion and long-only, use `oversold_bounce_long_only`.
+- If user asks for RSI mean reversion long-only, use `rsi_mean_reversion_long_only`.
 - If user asks for moving-average cross long-only, use `sma_crossover_long_only`.
 - If user asks for trend-dip long-only with MA regime filter, use `trend_dip_buy_long_only`.
 - If request cannot map safely to supported templates, ask for a template-constrained restatement.
@@ -62,6 +62,7 @@ Map the user strategy into schema fields, run the script, and report results in 
 - Use `max_positions`, `rank_metric`, and `rebalance_rule` for lightweight portfolio construction controls.
 - Keep runtime `data.source` on `bundle`; treat other data sources as reserved interface checks unless adapter support is added.
 - Use `live_data` fields only as reserved interface validation (for example `ibkr`), not for live order execution in this runner.
+- The `benchmark` symbol must be one of the ingested symbols. Default to the primary symbol to avoid runtime errors.
 
 ## Commands
 - Single run:
@@ -74,7 +75,7 @@ Map the user strategy into schema fields, run the script, and report results in 
   - `python scripts/run_backtest_from_schema.py --schema schema.json --validate-only`
 
 ## Common Mistakes
-- Bundle frequency mismatch (`5m` bundle but daily emission or inverse).
-- Running intraday templates against daily-only bundles.
+- Bundle frequency mismatch (hourly bundle but daily emission or inverse).
+- Setting `benchmark` to a symbol not present in the ingested bundle.
 - Expecting Yahoo minute data to cover very long history windows.
 - Adding unconstrained custom logic instead of using schema parameters.

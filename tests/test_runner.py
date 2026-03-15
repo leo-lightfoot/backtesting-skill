@@ -40,30 +40,6 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("PARAMS =", source)
         self.assertIn("sma_fast_period", source)
 
-    def test_make_algorithm_source_oversold_sets_context_asset(self):
-        params = {
-            "symbol": "QQQ",
-            "symbols": ["QQQ"],
-            "frequency_minutes": 5,
-            "market_tz": "America/New_York",
-            "ema_period": 10,
-            "sma_period": 20,
-            "ext_10": -0.3,
-            "ext_20": -0.4,
-            "min_down_days": 3,
-            "range_mult": 1.5,
-            "stop_buffer": 0.01,
-            "max_hold_days": 3,
-            "min_price": 5.0,
-            "min_avg_daily_volume": 2000000,
-            "entry_after_hour": 10,
-            "entry_after_minute": 0,
-            "setup_lookback_bars": 2500,
-            "hl_window": 6,
-        }
-        source = self.runner.make_algorithm_source("oversold_bounce_long_only", params)
-        self.assertIn("context.asset =", source)
-
     def test_make_algorithm_source_supports_rsi_template(self):
         params = {
             "symbol": "QQQ",
